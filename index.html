@@ -10,21 +10,29 @@
   <style>
     .file-slot { transition: all 0.2s; }
     .file-slot:focus-within { border-color: #22c55e; box-shadow: 0 0 0 3px #22c55e33; }
+    .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(12px); }
   </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col">
   <div class="flex h-screen">
     <!-- Sidebar -->
     <div class="w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col">
-      <div class="p-6 border-b border-zinc-800">
-        <h1 class="text-3xl font-bold tracking-tighter">ur.space</h1>
-        <p class="text-xs text-emerald-400 mt-1">copy • paste • preview • your device</p>
+      <div class="p-6 border-b border-zinc-800 flex items-center justify-between">
+        <div>
+          <h1 class="text-3xl font-bold tracking-tighter">ur.space</h1>
+          <p class="text-xs text-emerald-400 mt-1">copy • paste • preview • your device</p>
+        </div>
+        <button onclick="openSettings()" class="text-zinc-400 hover:text-white p-2">
+          <i class="fas fa-cog text-lg"></i>
+        </button>
       </div>
+
       <div class="p-4">
         <button onclick="newProject()" class="w-full bg-emerald-600 hover:bg-emerald-500 px-4 py-3 rounded-xl flex items-center justify-center gap-2">
           <i class="fas fa-plus"></i> New Project
         </button>
       </div>
+
       <div class="px-6 text-xs uppercase tracking-widest text-zinc-400 mb-2">Saved Projects</div>
       <div id="saved-list" class="flex-1 overflow-auto px-2"></div>
     </div>
@@ -51,7 +59,7 @@
       </div>
 
       <div class="flex flex-1 overflow-hidden">
-        <!-- Slots - Pure copy/paste -->
+        <!-- Slots -->
         <div class="w-96 bg-zinc-900 border-r border-zinc-800 p-6 overflow-auto" id="slots-panel">
           <h2 class="uppercase text-xs tracking-widest text-zinc-400 mb-4">Copy from AI → Paste into boxes</h2>
           <div id="file-slots" class="space-y-6"></div>
@@ -73,38 +81,284 @@
 
         <!-- AI Chat -->
         <div id="ai-panel" class="w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col hidden">
-          <div class="p-4 border-b border-zinc-800 flex justify-between">
-            <h2 class="font-medium">AI Assistant</h2>
+          <div class="p-4 border-b border-zinc-800 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+              <h2 class="font-medium">AI Assistant</h2>
+              <select id="provider-select" onchange="switchProvider()" class="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs"></select>
+            </div>
             <button onclick="toggleAIChat()" class="text-zinc-400">✕</button>
           </div>
-          <div class="p-4 border-b border-zinc-800">
-            <input id="api-key" type="password" placeholder="Grok or Gemini API key" 
-                   class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm">
-          </div>
+
           <div id="chat-messages" class="flex-1 p-4 overflow-auto space-y-4 text-sm"></div>
+
           <div class="p-4 border-t border-zinc-800">
-            <input id="chat-input" placeholder="Ask AI to write code..." 
-                   class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3"
-                   onkeydown="if(event.key==='Enter') sendAIRequest()">
+            <div class="flex gap-2">
+              <input id="chat-input" placeholder="Ask AI to write code..." 
+                     class="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm"
+                     onkeydown="if(event.key==='Enter') sendAIRequest()">
+              <button onclick="sendAIRequest()" class="px-4 bg-violet-600 hover:bg-violet-500 rounded-xl">
+                <i class="fas fa-paper-plane"></i>
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+    <div class="glass w-full max-w-2xl mx-4 rounded-3xl border border-zinc-700 overflow-hidden">
+      <div class="p-6 border-b border-zinc-700 flex justify-between items-center">
+        <h2 class="text-xl font-semibold">Settings & AI Providers</h2>
+        <button onclick="closeSettings()" class="text-zinc-400 hover:text-white text-2xl">&times;</button>
+      </div>
+
+      <div class="p-6 space-y-6">
+        <!-- Master Passphrase -->
+        <div>
+          <label class="block text-sm text-zinc-400 mb-2">Master Passphrase (for encryption)</label>
+          <div class="flex gap-2">
+            <input id="master-passphrase" type="password" placeholder="Enter strong passphrase" 
+                   class="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3">
+            <button onclick="setMasterPassphrase()" class="px-6 bg-emerald-600 hover:bg-emerald-500 rounded-xl">Set</button>
+          </div>
+          <p class="text-xs text-zinc-500 mt-1">This encrypts all your API keys. Remember it!</p>
+        </div>
+
+        <!-- Add New Provider -->
+        <div class="border border-zinc-700 rounded-2xl p-4">
+          <h3 class="font-medium mb-3">Add New Provider</h3>
+          <div class="grid grid-cols-2 gap-3">
+            <input id="new-name" placeholder="Name (e.g. My Grok)" class="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm">
+            <input id="new-baseurl" placeholder="Base URL (https://api.x.ai/v1)" value="https://api.openai.com/v1" class="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm">
+            <input id="new-apikey" type="password" placeholder="API Key" class="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm col-span-2">
+            <input id="new-model" placeholder="Model (e.g. grok-2-latest)" value="gpt-4o" class="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm col-span-2">
+          </div>
+          <button onclick="addProvider()" class="mt-3 w-full bg-violet-600 hover:bg-violet-500 py-2.5 rounded-xl text-sm">Add Provider</button>
+        </div>
+
+        <!-- Existing Providers -->
+        <div>
+          <h3 class="font-medium mb-3">Your Providers</h3>
+          <div id="providers-list" class="space-y-2 max-h-64 overflow-auto"></div>
+        </div>
+      </div>
+
+      <div class="p-6 border-t border-zinc-700 flex justify-end">
+        <button onclick="closeSettings()" class="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl">Done</button>
+      </div>
+    </div>
+  </div>
+
   <script>
+    // ==================== ENCRYPTION HELPERS ====================
+    let masterKey = null;
+
+    async function deriveKey(passphrase) {
+      const enc = new TextEncoder();
+      const keyMaterial = await crypto.subtle.importKey(
+        'raw', enc.encode(passphrase), { name: 'PBKDF2' }, false, ['deriveBits', 'deriveKey']
+      );
+      return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: enc.encode('urspace-salt'), iterations: 100000, hash: 'SHA-256' },
+        keyMaterial, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
+      );
+    }
+
+    async function encryptData(data, key) {
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const encoded = new TextEncoder().encode(JSON.stringify(data));
+      const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+      return { iv: Array.from(iv), data: Array.from(new Uint8Array(encrypted)) };
+    }
+
+    async function decryptData(encryptedObj, key) {
+      const iv = new Uint8Array(encryptedObj.iv);
+      const data = new Uint8Array(encryptedObj.data);
+      const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+      return JSON.parse(new TextDecoder().decode(decrypted));
+    }
+
+    // ==================== DATA MANAGEMENT ====================
     let currentProject = { name: "Untitled", template: "html", files: {} };
+    let providers = [];
+    let currentProviderId = null;
     let pyodideInstance = null;
 
     const defaultTemplates = {
       html: { "index.html": `<h1 class="text-6xl font-bold text-center mt-40">ur.space</h1>`, "styles.css": `body { background:#09090b; color:white; font-family:system-ui; }` },
-      react: { "main.tsx": `function App() {
-  return <h1 class="text-5xl p-8">Hello from UrSpace</h1>;
-}
-export default App;`, "styles.css": `` },
+      react: { "main.tsx": `function App() { return <h1 class="text-5xl p-8">Hello from UrSpace</h1>; } export default App;`, "styles.css": `` },
       python: { "main.py": `print("Hello from Python in ur.space")` }
     };
 
+    function saveEncryptedData() {
+      if (!masterKey) return;
+      const data = { providers, currentProviderId };
+      encryptData(data, masterKey).then(encrypted => {
+        localStorage.setItem('urspace_encrypted', JSON.stringify(encrypted));
+      });
+    }
+
+    async function loadEncryptedData() {
+      const stored = localStorage.getItem('urspace_encrypted');
+      if (!stored || !masterKey) return;
+      try {
+        const encrypted = JSON.parse(stored);
+        const decrypted = await decryptData(encrypted, masterKey);
+        providers = decrypted.providers || [];
+        currentProviderId = decrypted.currentProviderId || null;
+      } catch (e) {
+        alert("Wrong passphrase or corrupted data");
+        masterKey = null;
+      }
+    }
+
+    // ==================== PROVIDER MANAGEMENT ====================
+    function addProvider() {
+      const name = document.getElementById('new-name').value.trim();
+      const baseUrl = document.getElementById('new-baseurl').value.trim();
+      const apiKey = document.getElementById('new-apikey').value.trim();
+      const model = document.getElementById('new-model').value.trim();
+
+      if (!name || !baseUrl || !apiKey || !model) {
+        alert("Please fill all fields");
+        return;
+      }
+
+      const newProvider = {
+        id: Date.now().toString(),
+        name,
+        baseUrl,
+        apiKey,
+        model
+      };
+
+      providers.push(newProvider);
+      currentProviderId = newProvider.id;
+      saveEncryptedData();
+      renderProvidersList();
+      updateProviderSelect();
+
+      // Clear form
+      document.getElementById('new-name').value = '';
+      document.getElementById('new-apikey').value = '';
+    }
+
+    function deleteProvider(id) {
+      if (!confirm("Delete this provider?")) return;
+      providers = providers.filter(p => p.id !== id);
+      if (currentProviderId === id) currentProviderId = providers[0]?.id || null;
+      saveEncryptedData();
+      renderProvidersList();
+      updateProviderSelect();
+    }
+
+    function renderProvidersList() {
+      const container = document.getElementById('providers-list');
+      container.innerHTML = '';
+
+      if (providers.length === 0) {
+        container.innerHTML = `<div class="text-zinc-500 text-sm p-3">No providers yet. Add one above.</div>`;
+        return;
+      }
+
+      providers.forEach(p => {
+        const div = document.createElement('div');
+        div.className = `flex justify-between items-center p-3 rounded-xl border ${currentProviderId === p.id ? 'border-emerald-500 bg-emerald-900/20' : 'border-zinc-700'}`;
+        div.innerHTML = `
+          <div>
+            <div class="font-medium">${p.name}</div>
+            <div class="text-xs text-zinc-500">${p.model}</div>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="switchToProvider('${p.id}')" class="px-3 py-1 text-xs bg-zinc-800 rounded-lg hover:bg-zinc-700">Use</button>
+            <button onclick="deleteProvider('${p.id}')" class="px-3 py-1 text-xs text-red-400 hover:bg-red-900/30 rounded-lg">Delete</button>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function updateProviderSelect() {
+      const select = document.getElementById('provider-select');
+      select.innerHTML = '';
+      providers.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = p.name;
+        if (p.id === currentProviderId) option.selected = true;
+        select.appendChild(option);
+      });
+    }
+
+    function switchProvider() {
+      const select = document.getElementById('provider-select');
+      currentProviderId = select.value;
+      saveEncryptedData();
+    }
+
+    function switchToProvider(id) {
+      currentProviderId = id;
+      saveEncryptedData();
+      updateProviderSelect();
+      closeSettings();
+      document.getElementById('ai-panel').classList.remove('hidden');
+    }
+
+    // ==================== AI CHAT ====================
+    async function sendAIRequest() {
+      const input = document.getElementById('chat-input');
+      const messagesDiv = document.getElementById('chat-messages');
+      const prompt = input.value.trim();
+      if (!prompt) return;
+
+      const provider = providers.find(p => p.id === currentProviderId);
+      if (!provider) {
+        alert("No AI provider selected. Go to Settings to add one.");
+        return;
+      }
+
+      // Add user message
+      const userMsg = document.createElement('div');
+      userMsg.className = 'flex justify-end';
+      userMsg.innerHTML = `<div class="max-w-[80%] bg-violet-600 px-4 py-2 rounded-2xl">${prompt}</div>`;
+      messagesDiv.appendChild(userMsg);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+      input.value = '';
+
+      try {
+        const response = await fetch(`${provider.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${provider.apiKey}`
+          },
+          body: JSON.stringify({
+            model: provider.model,
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.7
+          })
+        });
+
+        const data = await response.json();
+        const reply = data.choices?.[0]?.message?.content || "Sorry, no response.";
+
+        const aiMsg = document.createElement('div');
+        aiMsg.className = 'flex justify-start';
+        aiMsg.innerHTML = `<div class="max-w-[80%] bg-zinc-800 px-4 py-2 rounded-2xl">${reply}</div>`;
+        messagesDiv.appendChild(aiMsg);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      } catch (e) {
+        const errorMsg = document.createElement('div');
+        errorMsg.className = 'text-red-400 text-sm';
+        errorMsg.textContent = 'Error: ' + e.message;
+        messagesDiv.appendChild(errorMsg);
+      }
+    }
+
+    // ==================== ORIGINAL FUNCTIONS (kept) ====================
     function createSlot(filename, content = "") {
       const div = document.createElement("div");
       div.className = "file-slot bg-zinc-800 border border-zinc-700 rounded-2xl p-4";
@@ -188,18 +442,55 @@ export default App;`, "styles.css": `` },
     }
 
     function toggleAIChat() {
-      document.getElementById("ai-panel").classList.toggle("hidden");
+      const panel = document.getElementById("ai-panel");
+      panel.classList.toggle("hidden");
+      if (!panel.classList.contains("hidden") && providers.length === 0) {
+        alert("Add an AI provider in Settings first");
+      }
     }
 
-    async function sendAIRequest() {
-      // Same AI chat logic as before (Grok/Gemini) — kept for brevity
-      alert("AI chat ready — paste your key and ask it to write code for any slot.");
-      // Full implementation is in previous version
+    function openSettings() {
+      document.getElementById('settings-modal').classList.remove('hidden');
+      renderProvidersList();
     }
 
-    window.onload = () => {
+    function closeSettings() {
+      document.getElementById('settings-modal').classList.add('hidden');
+    }
+
+    async function setMasterPassphrase() {
+      const pass = document.getElementById('master-passphrase').value.trim();
+      if (!pass || pass.length < 8) {
+        alert("Passphrase must be at least 8 characters");
+        return;
+      }
+      masterKey = await deriveKey(pass);
+      await loadEncryptedData();
+      renderProvidersList();
+      updateProviderSelect();
+      alert("Encryption enabled! All future data will be encrypted.");
+    }
+
+    // ==================== INIT ====================
+    window.onload = async () => {
       newProject();
       renderSavedList();
+
+      // Try to load existing encrypted data (will prompt for passphrase if needed)
+      const stored = localStorage.getItem('urspace_encrypted');
+      if (stored) {
+        const pass = prompt("Enter your master passphrase to unlock AI providers");
+        if (pass) {
+          masterKey = await deriveKey(pass);
+          await loadEncryptedData();
+          updateProviderSelect();
+        }
+      }
+
+      // Add default provider if none exist
+      if (providers.length === 0) {
+        // Optional: pre-fill a placeholder
+      }
     };
   </script>
 </body>
