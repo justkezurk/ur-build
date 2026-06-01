@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ur.space</title>
+  <title>urbuild</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
@@ -11,6 +11,7 @@
     .file-slot { transition: all 0.2s; }
     .file-slot:focus-within { border-color: #22c55e; box-shadow: 0 0 0 3px #22c55e33; }
     .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(12px); }
+    .logo { font-family: system-ui; font-weight: 800; letter-spacing: -2px; }
   </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col">
@@ -18,9 +19,15 @@
     <!-- Sidebar -->
     <div class="w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col">
       <div class="p-6 border-b border-zinc-800 flex items-center justify-between">
-        <div>
-          <h1 class="text-3xl font-bold tracking-tighter">ur.space</h1>
-          <p class="text-xs text-emerald-400 mt-1">copy • paste • preview • your device</p>
+        <div class="flex items-center gap-3">
+          <!-- Placeholder Logo -->
+          <div class="w-10 h-10 bg-gradient-to-br from-emerald-500 to-violet-600 rounded-2xl flex items-center justify-center">
+            <span class="text-white text-2xl font-black tracking-tighter">u</span>
+          </div>
+          <div>
+            <h1 class="text-3xl font-black tracking-tighter logo">urbuild</h1>
+            <p class="text-[10px] text-emerald-400 -mt-1">browser dev lab</p>
+          </div>
         </div>
         <button onclick="openSettings()" class="text-zinc-400 hover:text-white p-2">
           <i class="fas fa-cog text-lg"></i>
@@ -198,9 +205,9 @@
     let pyodideInstance = null;
 
     const defaultTemplates = {
-      html: { "index.html": `<h1 class="text-6xl font-bold text-center mt-40">ur.space</h1>`, "styles.css": `body { background:#09090b; color:white; font-family:system-ui; }` },
-      react: { "main.tsx": `function App() { return <h1 class="text-5xl p-8">Hello from UrSpace</h1>; } export default App;`, "styles.css": `` },
-      python: { "main.py": `print("Hello from Python in ur.space")` }
+      html: { "index.html": `<h1 class="text-6xl font-bold text-center mt-40">urbuild</h1>`, "styles.css": `body { background:#09090b; color:white; font-family:system-ui; }` },
+      react: { "main.tsx": `function App() { return <h1 class="text-5xl p-8">Hello from urbuild</h1>; } export default App;`, "styles.css": `` },
+      python: { "main.py": `print("Hello from Python in urbuild")` }
     };
 
     function saveEncryptedData() {
