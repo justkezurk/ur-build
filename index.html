@@ -38,7 +38,6 @@
     <div class="w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col">
       <div class="p-6 border-b border-zinc-800 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <!-- Moving Bubble Logo -->
           <div class="w-11 h-11 iridescent rounded-2xl flex items-center justify-center bubble">
             <span class="text-white text-3xl font-black tracking-tighter">u</span>
           </div>
@@ -66,12 +65,7 @@
         </div>
       </div>
 
-      <div class="px-6 text-xs uppercase tracking-widest text-zinc-400 mb-2 flex items-center justify-between">
-        <span>Saved Projects</span>
-        <button onclick="showImportTreeModal()" class="text-emerald-400 hover:text-emerald-300 text-xs flex items-center gap-1">
-          <i class="fas fa-sitemap"></i> <span class="hidden sm:inline">Import Tree</span>
-        </button>
-      </div>
+      <div class="px-6 text-xs uppercase tracking-widest text-zinc-400 mb-2">Saved Projects</div>
       <div id="saved-list" class="flex-1 overflow-auto px-2"></div>
     </div>
 
@@ -97,12 +91,23 @@
       </div>
 
       <div class="flex flex-1 overflow-hidden">
-        <!-- Slots -->
-        <div class="w-96 bg-zinc-900 border-r border-zinc-800 p-6 overflow-auto" id="slots-panel">
-          <h2 class="uppercase text-xs tracking-widest text-zinc-400 mb-4 flex items-center justify-between">
-            <span>Copy from AI → Paste into boxes</span>
-          </h2>
-          <div id="file-slots" class="space-y-6"></div>
+        <!-- Slots + Tree Importer -->
+        <div class="w-96 bg-zinc-900 border-r border-zinc-800 p-6 overflow-auto flex flex-col">
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <h2 class="uppercase text-xs tracking-widest text-zinc-400">File Tree Importer</h2>
+              <button onclick="importFileTree()" class="text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded-lg">Import</button>
+            </div>
+            <textarea id="tree-input" class="w-full h-40 bg-zinc-950 border border-zinc-700 rounded-2xl p-3 font-mono text-xs resize-y" placeholder="Paste file tree here...
+project/
+├── src/
+│   ├── App.tsx
+│   └── styles.css
+└── package.json"></textarea>
+          </div>
+
+          <h2 class="uppercase text-xs tracking-widest text-zinc-400 mb-4">Copy from AI → Paste into boxes</h2>
+          <div id="file-slots" class="space-y-6 flex-1"></div>
         </div>
 
         <!-- Preview -->
@@ -146,23 +151,6 @@
     </div>
   </div>
 
-  <!-- Import Tree Modal -->
-  <div id="import-tree-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-    <div class="glass w-full max-w-lg mx-4 rounded-3xl border border-zinc-700 p-6">
-      <h2 class="text-xl font-semibold mb-4">Import File Tree from AI</h2>
-      <p class="text-sm text-zinc-400 mb-4">Paste the file structure from Claude, Grok, or any AI (with indentation)</p>
-      <textarea id="tree-input" class="w-full h-64 bg-zinc-950 border border-zinc-700 rounded-2xl p-4 font-mono text-sm" placeholder="project/
-├── src/
-│   ├── App.tsx
-│   └── index.css
-└── package.json"></textarea>
-      <div class="flex gap-3 mt-4">
-        <button onclick="importFileTree()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-2xl font-medium">Import Structure</button>
-        <button onclick="closeImportTreeModal()" class="flex-1 bg-zinc-800 hover:bg-zinc-700 py-3 rounded-2xl">Cancel</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Settings Modal -->
   <div id="settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
     <div class="glass w-full max-w-2xl mx-4 rounded-3xl border border-zinc-700 overflow-hidden">
@@ -173,7 +161,7 @@
 
       <div class="p-6 space-y-6">
         <div>
-          <label class="block text-sm text-zinc-400 mb-2">Master Passphrase (for encryption)</label>
+          <label class="block text-sm text-zinc-400 mb-2">Master Passphrase</label>
           <div class="flex gap-2">
             <input id="master-passphrase" type="password" placeholder="Enter strong passphrase" class="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3">
             <button onclick="setMasterPassphrase()" class="px-6 bg-emerald-600 hover:bg-emerald-500 rounded-xl">Set</button>
@@ -229,9 +217,7 @@
     function saveEncryptedData() {
       if (!masterKey) return;
       const data = { providers, currentProviderId };
-      encryptData(data, masterKey).then(encrypted => {
-        localStorage.setItem('urspace_encrypted', JSON.stringify(encrypted));
-      });
+      encryptData(data, masterKey).then(encrypted => { localStorage.setItem('urspace_encrypted', JSON.stringify(encrypted)); });
     }
 
     async function loadEncryptedData() {
@@ -242,19 +228,13 @@
         const decrypted = await decryptData(encrypted, masterKey);
         providers = decrypted.providers || [];
         currentProviderId = decrypted.currentProviderId || null;
-      } catch (e) {
-        alert("Wrong passphrase or corrupted data");
-        masterKey = null;
-      }
+      } catch (e) { alert("Wrong passphrase"); masterKey = null; }
     }
 
     async function deriveKey(passphrase) {
       const enc = new TextEncoder();
       const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(passphrase), { name: 'PBKDF2' }, false, ['deriveBits', 'deriveKey']);
-      return crypto.subtle.deriveKey(
-        { name: 'PBKDF2', salt: enc.encode('urspace-salt'), iterations: 100000, hash: 'SHA-256' },
-        keyMaterial, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
-      );
+      return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: enc.encode('urspace-salt'), iterations: 100000, hash: 'SHA-256' }, keyMaterial, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
     }
 
     async function encryptData(data, key) {
@@ -279,13 +259,7 @@
         case 'gemini': newProvider = { id: Date.now().toString(), name: 'Gemini (Google)', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', apiKey: '', model: 'gemini-1.5-pro' }; break;
         case 'openai': newProvider = { id: Date.now().toString(), name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o' }; break;
       }
-      if (newProvider) {
-        providers.push(newProvider);
-        currentProviderId = newProvider.id;
-        saveEncryptedData();
-        renderProvidersList();
-        updateProviderSelect();
-      }
+      if (newProvider) { providers.push(newProvider); currentProviderId = newProvider.id; saveEncryptedData(); renderProvidersList(); updateProviderSelect(); }
     }
 
     function addProvider() {
@@ -295,41 +269,25 @@
       const model = document.getElementById('new-model').value.trim();
       if (!name || !baseUrl || !apiKey || !model) { alert("Please fill all fields"); return; }
       const newProvider = { id: Date.now().toString(), name, baseUrl, apiKey, model };
-      providers.push(newProvider);
-      currentProviderId = newProvider.id;
-      saveEncryptedData();
-      renderProvidersList();
-      updateProviderSelect();
-      document.getElementById('new-name').value = '';
-      document.getElementById('new-apikey').value = '';
+      providers.push(newProvider); currentProviderId = newProvider.id; saveEncryptedData(); renderProvidersList(); updateProviderSelect();
+      document.getElementById('new-name').value = ''; document.getElementById('new-apikey').value = '';
     }
 
     function deleteProvider(id) {
       if (!confirm("Delete this provider?")) return;
       providers = providers.filter(p => p.id !== id);
       if (currentProviderId === id) currentProviderId = providers[0]?.id || null;
-      saveEncryptedData();
-      renderProvidersList();
-      updateProviderSelect();
+      saveEncryptedData(); renderProvidersList(); updateProviderSelect();
     }
 
     function renderProvidersList() {
       const container = document.getElementById('providers-list');
       container.innerHTML = '';
-      if (providers.length === 0) {
-        container.innerHTML = `<div class="text-zinc-500 text-sm p-3">No providers yet.</div>`;
-        return;
-      }
+      if (providers.length === 0) { container.innerHTML = `<div class="text-zinc-500 text-sm p-3">No providers yet.</div>`; return; }
       providers.forEach(p => {
         const div = document.createElement('div');
         div.className = `flex justify-between items-center p-3 rounded-xl border ${currentProviderId === p.id ? 'border-emerald-500 bg-emerald-900/20' : 'border-zinc-700'}`;
-        div.innerHTML = `
-          <div><div class="font-medium">${p.name}</div><div class="text-xs text-zinc-500">${p.model}</div></div>
-          <div class="flex gap-2">
-            <button onclick="switchToProvider('${p.id}')" class="px-3 py-1 text-xs bg-zinc-800 rounded-lg hover:bg-zinc-700">Use</button>
-            <button onclick="deleteProvider('${p.id}')" class="px-3 py-1 text-xs text-red-400 hover:bg-red-900/30 rounded-lg">Delete</button>
-          </div>
-        `;
+        div.innerHTML = `<div><div class="font-medium">${p.name}</div><div class="text-xs text-zinc-500">${p.model}</div></div><div class="flex gap-2"><button onclick="switchToProvider('${p.id}')" class="px-3 py-1 text-xs bg-zinc-800 rounded-lg hover:bg-zinc-700">Use</button><button onclick="deleteProvider('${p.id}')" class="px-3 py-1 text-xs text-red-400 hover:bg-red-900/30 rounded-lg">Delete</button></div>`;
         container.appendChild(div);
       });
     }
@@ -339,8 +297,7 @@
       select.innerHTML = '';
       providers.forEach(p => {
         const option = document.createElement('option');
-        option.value = p.id;
-        option.textContent = p.name;
+        option.value = p.id; option.textContent = p.name;
         if (p.id === currentProviderId) option.selected = true;
         select.appendChild(option);
       });
@@ -352,11 +309,7 @@
     }
 
     function switchToProvider(id) {
-      currentProviderId = id;
-      saveEncryptedData();
-      updateProviderSelect();
-      closeSettings();
-      document.getElementById('ai-panel').classList.remove('hidden');
+      currentProviderId = id; saveEncryptedData(); updateProviderSelect(); closeSettings(); document.getElementById('ai-panel').classList.remove('hidden');
     }
 
     async function sendAIRequest() {
@@ -398,20 +351,14 @@
     function createSlot(filename, content = "") {
       const div = document.createElement("div");
       div.className = "file-slot bg-zinc-800 border border-zinc-700 rounded-2xl p-4";
-      div.innerHTML = `
-        <div class="text-xs text-zinc-400 mb-2 font-medium">${filename}</div>
-        <textarea class="w-full h-40 bg-zinc-950 border border-zinc-700 rounded-xl p-3 font-mono text-sm resize-y focus:outline-none" 
-                  oninput="currentProject.files['${filename}'] = this.value">${content}</textarea>
-      `;
+      div.innerHTML = `<div class="text-xs text-zinc-400 mb-2 font-medium">${filename}</div><textarea class="w-full h-40 bg-zinc-950 border border-zinc-700 rounded-xl p-3 font-mono text-sm resize-y focus:outline-none" oninput="currentProject.files['${filename}'] = this.value">${content}</textarea>`;
       return div;
     }
 
     function refreshSlots() {
       const container = document.getElementById("file-slots");
       container.innerHTML = "";
-      Object.keys(currentProject.files).forEach(key => {
-        container.appendChild(createSlot(key, currentProject.files[key]));
-      });
+      Object.keys(currentProject.files).forEach(key => { container.appendChild(createSlot(key, currentProject.files[key])); });
     }
 
     function loadTemplate() {
@@ -532,21 +479,11 @@
             refreshSlots();
             runProject();
             alert("Project imported successfully");
-          } catch (err) {
-            alert("Invalid project file");
-          }
+          } catch (err) { alert("Invalid project file"); }
         };
         reader.readAsText(file);
       };
       input.click();
-    }
-
-    function showImportTreeModal() {
-      document.getElementById('import-tree-modal').classList.remove('hidden');
-    }
-
-    function closeImportTreeModal() {
-      document.getElementById('import-tree-modal').classList.add('hidden');
     }
 
     function importFileTree() {
@@ -564,7 +501,6 @@
         if (!name) return;
 
         while (stack.length > 0 && stack[stack.length-1].indent >= indent) stack.pop();
-
         const parentPath = stack.length > 0 ? stack[stack.length-1].path + '/' : '';
         const fullPath = parentPath + name;
 
@@ -577,7 +513,6 @@
 
       currentProject.files = newFiles;
       refreshSlots();
-      closeImportTreeModal();
       alert(`Imported ${Object.keys(newFiles).length} files`);
     }
 
