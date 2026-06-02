@@ -12,6 +12,24 @@
     .file-slot:focus-within { border-color: #22c55e; box-shadow: 0 0 0 3px #22c55e33; }
     .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(12px); }
     .logo { font-family: system-ui; font-weight: 800; letter-spacing: -2px; }
+    .bubble {
+      animation: float 3s ease-in-out infinite;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .iridescent {
+      background: linear-gradient(45deg, #10b981, #8b5cf6, #ec4899, #10b981);
+      background-size: 300% 300%;
+      animation: iridescent 4s ease infinite;
+    }
+    @keyframes iridescent {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
   </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col">
@@ -20,9 +38,9 @@
     <div class="w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col">
       <div class="p-6 border-b border-zinc-800 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <!-- Placeholder Logo -->
-          <div class="w-10 h-10 bg-gradient-to-br from-emerald-500 to-violet-600 rounded-2xl flex items-center justify-center">
-            <span class="text-white text-2xl font-black tracking-tighter">u</span>
+          <!-- Moving Bubble Logo -->
+          <div class="w-11 h-11 iridescent rounded-2xl flex items-center justify-center bubble">
+            <span class="text-white text-3xl font-black tracking-tighter">u</span>
           </div>
           <div>
             <h1 class="text-3xl font-black tracking-tighter logo">urbuild</h1>
@@ -34,13 +52,26 @@
         </button>
       </div>
 
-      <div class="p-4">
+      <div class="p-4 space-y-2">
         <button onclick="newProject()" class="w-full bg-emerald-600 hover:bg-emerald-500 px-4 py-3 rounded-xl flex items-center justify-center gap-2">
           <i class="fas fa-plus"></i> New Project
         </button>
+        <div class="flex gap-2">
+          <button onclick="exportProject()" class="flex-1 bg-zinc-800 hover:bg-zinc-700 px-3 py-2 rounded-xl text-sm flex items-center justify-center gap-2">
+            <i class="fas fa-download"></i> Export
+          </button>
+          <button onclick="importProject()" class="flex-1 bg-zinc-800 hover:bg-zinc-700 px-3 py-2 rounded-xl text-sm flex items-center justify-center gap-2">
+            <i class="fas fa-upload"></i> Import
+          </button>
+        </div>
       </div>
 
-      <div class="px-6 text-xs uppercase tracking-widest text-zinc-400 mb-2">Saved Projects</div>
+      <div class="px-6 text-xs uppercase tracking-widest text-zinc-400 mb-2 flex items-center justify-between">
+        <span>Saved Projects</span>
+        <button onclick="showImportTreeModal()" class="text-emerald-400 hover:text-emerald-300 text-xs flex items-center gap-1">
+          <i class="fas fa-sitemap"></i> <span class="hidden sm:inline">Import Tree</span>
+        </button>
+      </div>
       <div id="saved-list" class="flex-1 overflow-auto px-2"></div>
     </div>
 
@@ -68,7 +99,9 @@
       <div class="flex flex-1 overflow-hidden">
         <!-- Slots -->
         <div class="w-96 bg-zinc-900 border-r border-zinc-800 p-6 overflow-auto" id="slots-panel">
-          <h2 class="uppercase text-xs tracking-widest text-zinc-400 mb-4">Copy from AI → Paste into boxes</h2>
+          <h2 class="uppercase text-xs tracking-widest text-zinc-400 mb-4 flex items-center justify-between">
+            <span>Copy from AI → Paste into boxes</span>
+          </h2>
           <div id="file-slots" class="space-y-6"></div>
         </div>
 
@@ -113,6 +146,23 @@
     </div>
   </div>
 
+  <!-- Import Tree Modal -->
+  <div id="import-tree-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+    <div class="glass w-full max-w-lg mx-4 rounded-3xl border border-zinc-700 p-6">
+      <h2 class="text-xl font-semibold mb-4">Import File Tree from AI</h2>
+      <p class="text-sm text-zinc-400 mb-4">Paste the file structure from Claude, Grok, or any AI (with indentation)</p>
+      <textarea id="tree-input" class="w-full h-64 bg-zinc-950 border border-zinc-700 rounded-2xl p-4 font-mono text-sm" placeholder="project/
+├── src/
+│   ├── App.tsx
+│   └── index.css
+└── package.json"></textarea>
+      <div class="flex gap-3 mt-4">
+        <button onclick="importFileTree()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-2xl font-medium">Import Structure</button>
+        <button onclick="closeImportTreeModal()" class="flex-1 bg-zinc-800 hover:bg-zinc-700 py-3 rounded-2xl">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Settings Modal -->
   <div id="settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
     <div class="glass w-full max-w-2xl mx-4 rounded-3xl border border-zinc-700 overflow-hidden">
@@ -122,33 +172,28 @@
       </div>
 
       <div class="p-6 space-y-6">
-        <!-- Master Passphrase -->
         <div>
           <label class="block text-sm text-zinc-400 mb-2">Master Passphrase (for encryption)</label>
           <div class="flex gap-2">
-            <input id="master-passphrase" type="password" placeholder="Enter strong passphrase" 
-                   class="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3">
+            <input id="master-passphrase" type="password" placeholder="Enter strong passphrase" class="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3">
             <button onclick="setMasterPassphrase()" class="px-6 bg-emerald-600 hover:bg-emerald-500 rounded-xl">Set</button>
           </div>
-          <p class="text-xs text-zinc-500 mt-1">This encrypts all your API keys. Remember it!</p>
         </div>
 
-        <!-- Quick Add Default Providers -->
         <div class="border border-zinc-700 rounded-2xl p-4">
           <h3 class="font-medium mb-3">Quick Add Popular Providers</h3>
           <div class="flex flex-wrap gap-2">
-            <button onclick="addDefaultProvider('grok')" class="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm flex items-center gap-2"><i class="fab fa-x-twitter"></i> Grok (xAI)</button>
-            <button onclick="addDefaultProvider('claude')" class="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm flex items-center gap-2"><i class="fas fa-robot"></i> Claude (Anthropic)</button>
-            <button onclick="addDefaultProvider('gemini')" class="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm flex items-center gap-2"><i class="fab fa-google"></i> Gemini (Google)</button>
+            <button onclick="addDefaultProvider('grok')" class="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm flex items-center gap-2"><i class="fab fa-x-twitter"></i> Grok</button>
+            <button onclick="addDefaultProvider('claude')" class="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm flex items-center gap-2"><i class="fas fa-robot"></i> Claude</button>
+            <button onclick="addDefaultProvider('gemini')" class="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm flex items-center gap-2"><i class="fab fa-google"></i> Gemini</button>
             <button onclick="addDefaultProvider('openai')" class="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm flex items-center gap-2"><i class="fas fa-brain"></i> OpenAI</button>
           </div>
         </div>
 
-        <!-- Add New Provider -->
         <div class="border border-zinc-700 rounded-2xl p-4">
           <h3 class="font-medium mb-3">Add Custom Provider</h3>
           <div class="grid grid-cols-2 gap-3">
-            <input id="new-name" placeholder="Name (e.g. My Grok)" class="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm">
+            <input id="new-name" placeholder="Name" class="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm">
             <input id="new-baseurl" placeholder="Base URL" value="https://api.openai.com/v1" class="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm">
             <input id="new-apikey" type="password" placeholder="API Key" class="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm col-span-2">
             <input id="new-model" placeholder="Model" value="gpt-4o" class="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm col-span-2">
@@ -156,7 +201,6 @@
           <button onclick="addProvider()" class="mt-3 w-full bg-violet-600 hover:bg-violet-500 py-2.5 rounded-xl text-sm">Add Provider</button>
         </div>
 
-        <!-- Existing Providers -->
         <div>
           <h3 class="font-medium mb-3">Your Providers</h3>
           <div id="providers-list" class="space-y-2 max-h-64 overflow-auto"></div>
@@ -170,35 +214,7 @@
   </div>
 
   <script>
-    // ==================== ENCRYPTION HELPERS ====================
     let masterKey = null;
-
-    async function deriveKey(passphrase) {
-      const enc = new TextEncoder();
-      const keyMaterial = await crypto.subtle.importKey(
-        'raw', enc.encode(passphrase), { name: 'PBKDF2' }, false, ['deriveBits', 'deriveKey']
-      );
-      return crypto.subtle.deriveKey(
-        { name: 'PBKDF2', salt: enc.encode('urspace-salt'), iterations: 100000, hash: 'SHA-256' },
-        keyMaterial, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
-      );
-    }
-
-    async function encryptData(data, key) {
-      const iv = crypto.getRandomValues(new Uint8Array(12));
-      const encoded = new TextEncoder().encode(JSON.stringify(data));
-      const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
-      return { iv: Array.from(iv), data: Array.from(new Uint8Array(encrypted)) };
-    }
-
-    async function decryptData(encryptedObj, key) {
-      const iv = new Uint8Array(encryptedObj.iv);
-      const data = new Uint8Array(encryptedObj.data);
-      const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
-      return JSON.parse(new TextDecoder().decode(decrypted));
-    }
-
-    // ==================== DATA MANAGEMENT ====================
     let currentProject = { name: "Untitled", template: "html", files: {} };
     let providers = [];
     let currentProviderId = null;
@@ -232,22 +248,36 @@
       }
     }
 
-    // ==================== DEFAULT PROVIDERS ====================
+    async function deriveKey(passphrase) {
+      const enc = new TextEncoder();
+      const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(passphrase), { name: 'PBKDF2' }, false, ['deriveBits', 'deriveKey']);
+      return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: enc.encode('urspace-salt'), iterations: 100000, hash: 'SHA-256' },
+        keyMaterial, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
+      );
+    }
+
+    async function encryptData(data, key) {
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const encoded = new TextEncoder().encode(JSON.stringify(data));
+      const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+      return { iv: Array.from(iv), data: Array.from(new Uint8Array(encrypted)) };
+    }
+
+    async function decryptData(encryptedObj, key) {
+      const iv = new Uint8Array(encryptedObj.iv);
+      const data = new Uint8Array(encryptedObj.data);
+      const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+      return JSON.parse(new TextDecoder().decode(decrypted));
+    }
+
     function addDefaultProvider(type) {
       let newProvider;
       switch(type) {
-        case 'grok':
-          newProvider = { id: Date.now().toString(), name: 'Grok (xAI)', baseUrl: 'https://api.x.ai/v1', apiKey: '', model: 'grok-2-latest' };
-          break;
-        case 'claude':
-          newProvider = { id: Date.now().toString(), name: 'Claude (Anthropic)', baseUrl: 'https://api.anthropic.com/v1', apiKey: '', model: 'claude-3-5-sonnet-20241022' };
-          break;
-        case 'gemini':
-          newProvider = { id: Date.now().toString(), name: 'Gemini (Google)', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', apiKey: '', model: 'gemini-1.5-pro' };
-          break;
-        case 'openai':
-          newProvider = { id: Date.now().toString(), name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o' };
-          break;
+        case 'grok': newProvider = { id: Date.now().toString(), name: 'Grok (xAI)', baseUrl: 'https://api.x.ai/v1', apiKey: '', model: 'grok-2-latest' }; break;
+        case 'claude': newProvider = { id: Date.now().toString(), name: 'Claude (Anthropic)', baseUrl: 'https://api.anthropic.com/v1', apiKey: '', model: 'claude-3-5-sonnet-20241022' }; break;
+        case 'gemini': newProvider = { id: Date.now().toString(), name: 'Gemini (Google)', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', apiKey: '', model: 'gemini-1.5-pro' }; break;
+        case 'openai': newProvider = { id: Date.now().toString(), name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o' }; break;
       }
       if (newProvider) {
         providers.push(newProvider);
@@ -258,32 +288,18 @@
       }
     }
 
-    // ==================== PROVIDER MANAGEMENT ====================
     function addProvider() {
       const name = document.getElementById('new-name').value.trim();
       const baseUrl = document.getElementById('new-baseurl').value.trim();
       const apiKey = document.getElementById('new-apikey').value.trim();
       const model = document.getElementById('new-model').value.trim();
-
-      if (!name || !baseUrl || !apiKey || !model) {
-        alert("Please fill all fields");
-        return;
-      }
-
-      const newProvider = {
-        id: Date.now().toString(),
-        name,
-        baseUrl,
-        apiKey,
-        model
-      };
-
+      if (!name || !baseUrl || !apiKey || !model) { alert("Please fill all fields"); return; }
+      const newProvider = { id: Date.now().toString(), name, baseUrl, apiKey, model };
       providers.push(newProvider);
       currentProviderId = newProvider.id;
       saveEncryptedData();
       renderProvidersList();
       updateProviderSelect();
-
       document.getElementById('new-name').value = '';
       document.getElementById('new-apikey').value = '';
     }
@@ -300,20 +316,15 @@
     function renderProvidersList() {
       const container = document.getElementById('providers-list');
       container.innerHTML = '';
-
       if (providers.length === 0) {
-        container.innerHTML = `<div class="text-zinc-500 text-sm p-3">No providers yet. Use Quick Add above.</div>`;
+        container.innerHTML = `<div class="text-zinc-500 text-sm p-3">No providers yet.</div>`;
         return;
       }
-
       providers.forEach(p => {
         const div = document.createElement('div');
         div.className = `flex justify-between items-center p-3 rounded-xl border ${currentProviderId === p.id ? 'border-emerald-500 bg-emerald-900/20' : 'border-zinc-700'}`;
         div.innerHTML = `
-          <div>
-            <div class="font-medium">${p.name}</div>
-            <div class="text-xs text-zinc-500">${p.model}</div>
-          </div>
+          <div><div class="font-medium">${p.name}</div><div class="text-xs text-zinc-500">${p.model}</div></div>
           <div class="flex gap-2">
             <button onclick="switchToProvider('${p.id}')" class="px-3 py-1 text-xs bg-zinc-800 rounded-lg hover:bg-zinc-700">Use</button>
             <button onclick="deleteProvider('${p.id}')" class="px-3 py-1 text-xs text-red-400 hover:bg-red-900/30 rounded-lg">Delete</button>
@@ -336,8 +347,7 @@
     }
 
     function switchProvider() {
-      const select = document.getElementById('provider-select');
-      currentProviderId = select.value;
+      currentProviderId = document.getElementById('provider-select').value;
       saveEncryptedData();
     }
 
@@ -349,44 +359,29 @@
       document.getElementById('ai-panel').classList.remove('hidden');
     }
 
-    // ==================== AI CHAT ====================
     async function sendAIRequest() {
       const input = document.getElementById('chat-input');
       const messagesDiv = document.getElementById('chat-messages');
       const prompt = input.value.trim();
       if (!prompt) return;
-
       const provider = providers.find(p => p.id === currentProviderId);
-      if (!provider) {
-        alert("No AI provider selected. Go to Settings to add one.");
-        return;
-      }
+      if (!provider) { alert("No AI provider selected"); return; }
 
       const userMsg = document.createElement('div');
       userMsg.className = 'flex justify-end';
       userMsg.innerHTML = `<div class="max-w-[80%] bg-violet-600 px-4 py-2 rounded-2xl">${prompt}</div>`;
       messagesDiv.appendChild(userMsg);
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
-
       input.value = '';
 
       try {
         const response = await fetch(`${provider.baseUrl}/chat/completions`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${provider.apiKey}`
-          },
-          body: JSON.stringify({
-            model: provider.model,
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.7
-          })
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${provider.apiKey}` },
+          body: JSON.stringify({ model: provider.model, messages: [{ role: "user", content: prompt }], temperature: 0.7 })
         });
-
         const data = await response.json();
         const reply = data.choices?.[0]?.message?.content || "Sorry, no response.";
-
         const aiMsg = document.createElement('div');
         aiMsg.className = 'flex justify-start';
         aiMsg.innerHTML = `<div class="max-w-[80%] bg-zinc-800 px-4 py-2 rounded-2xl">${reply}</div>`;
@@ -400,7 +395,6 @@
       }
     }
 
-    // ==================== ORIGINAL FUNCTIONS ====================
     function createSlot(filename, content = "") {
       const div = document.createElement("div");
       div.className = "file-slot bg-zinc-800 border border-zinc-700 rounded-2xl p-4";
@@ -433,7 +427,6 @@
       const consoleEl = document.getElementById("python-console");
       frame.classList.add("hidden");
       consoleEl.classList.add("hidden");
-
       if (currentProject.template === "python") {
         consoleEl.classList.remove("hidden");
         consoleEl.innerHTML = "";
@@ -457,7 +450,7 @@
       else saved.push({...currentProject});
       localStorage.setItem("urspace_projects", JSON.stringify(saved));
       renderSavedList();
-      alert("✅ Saved in browser");
+      alert("✅ Saved");
     }
 
     function renderSavedList() {
@@ -465,11 +458,19 @@
       list.innerHTML = "";
       JSON.parse(localStorage.getItem("urspace_projects") || "[]").forEach(proj => {
         const el = document.createElement("div");
-        el.className = "px-4 py-3 hover:bg-zinc-800 cursor-pointer rounded-xl mx-2 mb-1";
-        el.textContent = proj.name;
+        el.className = "px-4 py-3 hover:bg-zinc-800 cursor-pointer rounded-xl mx-2 mb-1 flex justify-between items-center";
+        el.innerHTML = `<span>${proj.name}</span><button onclick="event.stopImmediatePropagation(); deleteProject('${proj.name}')" class="text-red-400 hover:text-red-300 px-2">×</button>`;
         el.onclick = () => { currentProject = {...proj}; loadTemplate(); };
         list.appendChild(el);
       });
+    }
+
+    function deleteProject(name) {
+      if (!confirm("Delete this project?")) return;
+      let saved = JSON.parse(localStorage.getItem("urspace_projects") || "[]");
+      saved = saved.filter(p => p.name !== name);
+      localStorage.setItem("urspace_projects", JSON.stringify(saved));
+      renderSavedList();
     }
 
     function newProject() {
@@ -486,9 +487,7 @@
     function toggleAIChat() {
       const panel = document.getElementById("ai-panel");
       panel.classList.toggle("hidden");
-      if (!panel.classList.contains("hidden") && providers.length === 0) {
-        alert("Add an AI provider in Settings first");
-      }
+      if (!panel.classList.contains("hidden") && providers.length === 0) alert("Add an AI provider in Settings first");
     }
 
     function openSettings() {
@@ -502,10 +501,7 @@
 
     async function setMasterPassphrase() {
       const pass = document.getElementById('master-passphrase').value.trim();
-      if (!pass || pass.length < 8) {
-        alert("Passphrase must be at least 8 characters");
-        return;
-      }
+      if (!pass || pass.length < 8) { alert("Passphrase must be at least 8 characters"); return; }
       masterKey = await deriveKey(pass);
       await loadEncryptedData();
       renderProvidersList();
@@ -513,7 +509,78 @@
       alert("Encryption enabled!");
     }
 
-    // ==================== INIT ====================
+    function exportProject() {
+      const dataStr = JSON.stringify(currentProject, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      const exportFileDefaultName = `${currentProject.name.replace(/\s+/g, '_')}.json`;
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+    }
+
+    function importProject() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = e => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = ev => {
+          try {
+            currentProject = JSON.parse(ev.target.result);
+            refreshSlots();
+            runProject();
+            alert("Project imported successfully");
+          } catch (err) {
+            alert("Invalid project file");
+          }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    }
+
+    function showImportTreeModal() {
+      document.getElementById('import-tree-modal').classList.remove('hidden');
+    }
+
+    function closeImportTreeModal() {
+      document.getElementById('import-tree-modal').classList.add('hidden');
+    }
+
+    function importFileTree() {
+      const input = document.getElementById('tree-input').value.trim();
+      if (!input) { alert("Please paste a file tree"); return; }
+
+      const lines = input.split('\n');
+      const newFiles = {};
+      const stack = [];
+
+      lines.forEach(line => {
+        if (!line.trim()) return;
+        const indent = line.search(/\S/);
+        const name = line.trim().replace(/[\u2500-\u257F]/g, '').trim();
+        if (!name) return;
+
+        while (stack.length > 0 && stack[stack.length-1].indent >= indent) stack.pop();
+
+        const parentPath = stack.length > 0 ? stack[stack.length-1].path + '/' : '';
+        const fullPath = parentPath + name;
+
+        if (name.includes('.')) {
+          newFiles[fullPath] = '';
+        } else {
+          stack.push({ path: fullPath, indent });
+        }
+      });
+
+      currentProject.files = newFiles;
+      refreshSlots();
+      closeImportTreeModal();
+      alert(`Imported ${Object.keys(newFiles).length} files`);
+    }
+
     window.onload = async () => {
       newProject();
       renderSavedList();
