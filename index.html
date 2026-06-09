@@ -157,9 +157,8 @@ project/
           <div id="python-console" class="hidden h-64 bg-black text-green-400 font-mono p-4 overflow-auto text-sm"></div>
         </div>
 
-        <!-- Nexus Panel (replaces old AI panel) -->
+        <!-- Nexus Panel -->
         <div id="nexus-panel" class="w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col hidden relative" style="width: 380px;">
-          <!-- Resize Handle -->
           <div class="nexus-resize-handle" onmousedown="startNexusResize(event)"></div>
 
           <div class="p-4 border-b border-zinc-800 flex justify-between items-center">
@@ -172,12 +171,8 @@ project/
             </div>
           </div>
 
-          <!-- Stacking Container for boxes -->
-          <div id="nexus-boxes" class="flex-1 p-4 overflow-auto flex flex-col">
-            <!-- Default single chat box will be injected here by JS -->
-          </div>
+          <div id="nexus-boxes" class="flex-1 p-4 overflow-auto flex flex-col"></div>
 
-          <!-- Persistent + button at bottom -->
           <div class="p-4 border-t border-zinc-800">
             <button onclick="showNexusSpawnMenu()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl flex items-center justify-center gap-2">
               <i class="fas fa-plus"></i> Add Cell
@@ -188,7 +183,7 @@ project/
     </div>
   </div>
 
-  <!-- Settings Modal (unchanged) -->
+  <!-- Settings Modal -->
   <div id="settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
     <div class="glass w-full max-w-2xl mx-4 rounded-3xl border border-zinc-700 overflow-hidden">
       <div class="p-6 border-b border-zinc-700 flex justify-between items-center">
@@ -247,166 +242,172 @@ project/
     let containerCounter = 0;
     let nexusResizeData = null;
 
+    const INCEPTION_TEMPLATE = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>urbuild • inception</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body { background: #0a0a0a; color: #f4f4f5; }
+    .sacred-geometry-bg {
+      background-image: 
+        url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2280%22 height=%2280%22 viewBox=%220 0 80 80%22><circle cx=%2240%22 cy=%2240%22 r=%2211%22 fill=%22none%22 stroke=%22%23e4e4e7%22 stroke-width=%220.5%22 opacity=%220.07%22/><circle cx=%2240%22 cy=%2240%22 r=%227.5%22 fill=%22none%22 stroke=%22%23e4e4e7%22 stroke-width=%220.5%22 opacity=%220.07%22/><circle cx=%2240%22 cy=%2240%22 r=%224%22 fill=%22none%22 stroke=%22%23e4e4e7%22 stroke-width=%220.5%22 opacity=%220.07%22/></svg>'),
+        url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22160%22 height=%22160%22 viewBox=%220 0 160 160%22><g stroke=%22%23e4e4e7%22 stroke-width=%220.4%22 fill=%22none%22 opacity=%220.05%22><polygon points=%2280,8 152,56 128,136 32,136 8,56%22/><polygon points=%2280,24 136,64 116,124 44,124 24,64%22/><polygon points=%2280,40 120,72 104,112 56,112 40,72%22/></g></svg>');
+      background-size: 90px 90px, 180px 180px;
+      background-position: center;
+      background-attachment: fixed;
+    }
+    .preview-frame { background: white; box-shadow: 0 0 0 1px #27272a; }
+    textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .section-header { font-size: 0.75rem; letter-spacing: 0.5px; text-transform: uppercase; }
+  </style>
+</head>
+<body class="sacred-geometry-bg min-h-screen">
+  <div class="max-w-6xl mx-auto w-full p-6">
+    <div class="flex items-center justify-between mb-8">
+      <div class="flex items-center gap-4">
+        <div class="w-9 h-9 bg-emerald-500 rounded-2xl flex items-center justify-center">
+          <span class="text-white text-2xl font-black tracking-tighter">u</span>
+        </div>
+        <div>
+          <h1 class="text-4xl font-black tracking-tighter">urbuild</h1>
+          <p class="text-emerald-400 text-sm -mt-1">inception matrix</p>
+        </div>
+      </div>
+      <div class="text-xs px-3 py-1 bg-zinc-900/60 rounded-full border border-zinc-800 text-zinc-400">
+        Live • Self-referential
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div>
+        <div class="flex items-center justify-between mb-2 px-1">
+          <div><div class="section-header text-zinc-400">index.html</div></div>
+          <button onclick="updatePreview()" class="text-xs px-4 py-1.5 bg-zinc-800 hover:bg-emerald-600 transition-colors rounded-xl flex items-center gap-2 text-sm">
+            <i class="fas fa-sync-alt text-xs"></i> <span>Update Preview</span>
+          </button>
+        </div>
+        <textarea id="html-input" class="w-full h-[460px] bg-zinc-950/90 border border-zinc-800 rounded-3xl p-5 font-mono text-sm resize-y focus:outline-none focus:border-emerald-500/60" oninput="updatePreview()"><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>urbuild • inception</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body { background: #0a0a0a; color: #f4f4f5; }
+    .sacred-geometry-bg {
+      background-image: 
+        url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2280%22 height=%2280%22 viewBox=%220 0 80 80%22><circle cx=%2240%22 cy=%2240%22 r=%2211%22 fill=%22none%22 stroke=%22%23e4e4e7%22 stroke-width=%220.5%22 opacity=%220.07%22/><circle cx=%2240%22 cy=%2240%22 r=%227.5%22 fill=%22none%22 stroke=%22%23e4e4e7%22 stroke-width=%220.5%22 opacity=%220.07%22/><circle cx=%2240%22 cy=%2240%22 r=%224%22 fill=%22none%22 stroke=%22%23e4e4e7%22 stroke-width=%220.5%22 opacity=%220.07%22/></svg>'),
+        url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22160%22 height=%22160%22 viewBox=%220 0 160 160%22><g stroke=%22%23e4e4e7%22 stroke-width=%220.4%22 fill=%22none%22 opacity=%220.05%22><polygon points=%2280,8 152,56 128,136 32,136 8,56%22/><polygon points=%2280,24 136,64 116,124 44,124 24,64%22/><polygon points=%2280,40 120,72 104,112 56,112 40,72%22/></g></svg>');
+      background-size: 90px 90px, 180px 180px;
+      background-position: center;
+      background-attachment: fixed;
+    }
+    .preview-frame { background: white; box-shadow: 0 0 0 1px #27272a; }
+    textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .section-header { font-size: 0.75rem; letter-spacing: 0.5px; text-transform: uppercase; }
+  </style>
+</head>
+<body class="sacred-geometry-bg min-h-screen">
+  <div class="max-w-6xl mx-auto w-full p-6">
+    <div class="flex items-center justify-between mb-8">
+      <div class="flex items-center gap-4">
+        <div class="w-9 h-9 bg-emerald-500 rounded-2xl flex items-center justify-center">
+          <span class="text-white text-2xl font-black tracking-tighter">u</span>
+        </div>
+        <div>
+          <h1 class="text-4xl font-black tracking-tighter">urbuild</h1>
+          <p class="text-emerald-400 text-sm -mt-1">inception matrix</p>
+        </div>
+      </div>
+      <div class="text-xs px-3 py-1 bg-zinc-900/60 rounded-full border border-zinc-800 text-zinc-400">
+        Live • Self-referential
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div>
+        <div class="flex items-center justify-between mb-2 px-1">
+          <div><div class="section-header text-zinc-400">index.html</div></div>
+          <button onclick="updatePreview()" class="text-xs px-4 py-1.5 bg-zinc-800 hover:bg-emerald-600 transition-colors rounded-xl flex items-center gap-2 text-sm">
+            <i class="fas fa-sync-alt text-xs"></i> <span>Update Preview</span>
+          </button>
+        </div>
+        <textarea id="html-input" class="w-full h-[460px] bg-zinc-950/90 border border-zinc-800 rounded-3xl p-5 font-mono text-sm resize-y focus:outline-none focus:border-emerald-500/60" oninput="updatePreview()"><!-- Edit this HTML --></textarea>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between mb-2 px-1">
+          <div class="section-header text-zinc-400">Live Preview</div>
+        </div>
+        <div class="border border-zinc-800 rounded-3xl p-3 h-[460px] overflow-hidden bg-zinc-950/60">
+          <iframe id="preview-frame" class="preview-frame w-full h-full rounded-2xl border-0 shadow-inner" style="box-shadow: 0 0 0 1px #27272a;"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-8 text-center">
+      <p class="text-xs text-zinc-500 max-w-md mx-auto">
+        Edit the HTML on the left. It renders live in the preview on the right.<br>
+        This is the new default inception experience for urbuild.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    function updatePreview() {
+      const html = document.getElementById('html-input').value;
+      const frame = document.getElementById('preview-frame');
+      frame.srcdoc = html;
+    }
+    window.onload = function() {
+      const fullHTML = document.documentElement.outerHTML;
+      document.getElementById('html-input').value = fullHTML;
+      updatePreview();
+    };
+  </script>
+</body>
+</html>`;
+
     const defaultTemplates = {
-      html: { "index.html": `<h1 class="text-6xl font-bold text-center mt-40">urbuild</h1>`, "styles.css": `body { background:#09090b; color:white; font-family:system-ui; }` },
+      html: { "index.html": INCEPTION_TEMPLATE },
       react: { "main.tsx": `function App() { return <h1 class="text-5xl p-8">Hello from urbuild</h1>; } export default App;`, "styles.css": `` },
       python: { "main.py": `print("Hello from Python in urbuild")` }
     };
 
-    // ... (keep all existing functions unchanged: saveEncryptedData, loadEncryptedData, deriveKey, etc. up to toggleAIChat) ...
-
-    function toggleNexus() {
-      const panel = document.getElementById('nexus-panel');
-      panel.classList.toggle('hidden');
-      if (!panel.classList.contains('hidden')) {
-        initNexusPanel();
-      }
+    function createSlot(filename, content = "") {
+      const div = document.createElement("div");
+      div.className = "file-slot bg-zinc-800 border border-zinc-700 rounded-2xl p-4";
+      div.innerHTML = `<div class="text-xs text-zinc-400 mb-2 font-medium">${filename}</div><textarea class="w-full h-40 bg-zinc-950 border border-zinc-700 rounded-xl p-3 font-mono text-sm resize-y focus:outline-none" oninput="currentProject.files['${filename}'] = this.value">${content}</textarea>`;
+      return div;
     }
 
-    function minimizeNexus() {
-      const panel = document.getElementById('nexus-panel');
-      panel.style.width = panel.style.width === '0px' ? '380px' : '0px';
-      panel.style.overflow = panel.style.width === '0px' ? 'hidden' : 'visible';
+    function refreshSlots() {
+      const container = document.getElementById("file-slots");
+      container.innerHTML = "";
+      Object.keys(currentProject.files).forEach(key => { container.appendChild(createSlot(key, currentProject.files[key])); });
     }
 
-    function initNexusPanel() {
-      const boxesContainer = document.getElementById('nexus-boxes');
-      if (boxesContainer.children.length === 0) {
-        // Create default chat box (preserves old behavior)
-        const defaultBox = createNexusBox('AI Chat', true);
-        boxesContainer.appendChild(defaultBox);
-      }
+    function loadTemplate() {
+      const t = document.getElementById("template-select").value;
+      currentProject.template = t;
+      currentProject.files = JSON.parse(JSON.stringify(defaultTemplates[t] || defaultTemplates.html));
+      refreshSlots();
+      runProject();
     }
 
-    function createNexusBox(title, isDefaultChat = false) {
-      const box = document.createElement('div');
-      box.className = 'nexus-box flex flex-col';
-
-      box.innerHTML = `
-        <div class="nexus-box-header">
-          <span>${title}</span>
-          <div class="flex gap-1">
-            <button class="text-zinc-400 hover:text-white px-1" onclick="this.closest('.nexus-box').style.display='none'">−</button>
-            <button class="text-zinc-400 hover:text-red-400 px-1" onclick="this.closest('.nexus-box').remove()">×</button>
-          </div>
-        </div>
-        <div class="p-3 flex-1">
-          ${isDefaultChat ? `
-            <div id="nexus-default-chat" class="flex flex-col h-full">
-              <div class="flex-1 overflow-auto text-sm" id="nexus-chat-messages"></div>
-              <div class="mt-2 flex gap-2">
-                <input placeholder="Message..." class="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm" onkeydown="if(event.key==='Enter') sendNexusMessage(this)">
-                <button onclick="sendNexusMessage(this.previousElementSibling)" class="px-4 bg-violet-600 hover:bg-violet-500 rounded-xl">Send</button>
-              </div>
-            </div>
-          ` : `<div class="text-xs text-zinc-500 p-2">New cell ready. (Future: content here)</div>`}
-        </div>
-      `;
-      return box;
+    function newProject() {
+      currentProject = { name: `Project ${new Date().toLocaleDateString()}`, template: "html", files: JSON.parse(JSON.stringify(defaultTemplates.html)) };
+      refreshSlots();
+      runProject();
     }
 
-    function showNexusSpawnMenu() {
-      const menu = document.createElement('div');
-      menu.className = 'absolute bottom-16 right-4 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl py-1 z-[9999]';
-      menu.innerHTML = `
-        <div onclick="spawnNexusCell('ai')" class="px-4 py-2.5 hover:bg-zinc-800 cursor-pointer flex items-center gap-3"><i class="fas fa-robot"></i> AI Cell</div>
-        <div onclick="spawnNexusCell('notebook')" class="px-4 py-2.5 hover:bg-zinc-800 cursor-pointer flex items-center gap-3"><i class="fas fa-book"></i> Notebook / Molab Cell</div>
-        <div onclick="spawnNexusCell('collab')" class="px-4 py-2.5 hover:bg-zinc-800 cursor-pointer flex items-center gap-3"><i class="fas fa-users"></i> Collab / Team Cell</div>
-        <div onclick="spawnNexusCell('api')" class="px-4 py-2.5 hover:bg-zinc-800 cursor-pointer flex items-center gap-3"><i class="fas fa-plug"></i> API Cell</div>
-        <div class="border-t border-zinc-700 my-1"></div>
-        <div onclick="spawnNexusCell('custom')" class="px-4 py-2.5 hover:bg-zinc-800 cursor-pointer text-emerald-400">+ Custom (coming soon)</div>
-      `;
-
-      // Position relative to the + button
-      const plusBtn = event.currentTarget;
-      document.body.appendChild(menu);
-
-      // Close on outside click
-      setTimeout(() => {
-        document.addEventListener('click', function handler(e) {
-          if (!menu.contains(e.target)) {
-            menu.remove();
-            document.removeEventListener('click', handler);
-          }
-        }, { once: true });
-      }, 10);
-    }
-
-    function spawnNexusCell(type) {
-      const container = document.getElementById('nexus-boxes');
-      let title = 'New Cell';
-      if (type === 'ai') title = 'AI Cell';
-      if (type === 'notebook') title = 'Notebook Cell';
-      if (type === 'collab') title = 'Collab Cell';
-      if (type === 'api') title = 'API Cell';
-
-      const box = createNexusBox(title);
-      container.appendChild(box);
-      container.scrollTop = container.scrollHeight;
-
-      // Close any open menu
-      document.querySelectorAll('.absolute.bottom-16').forEach(el => el.remove());
-    }
-
-    // Basic Nexus chat (placeholder for default box)
-    function sendNexusMessage(input) {
-      if (!input || !input.value.trim()) return;
-      const messagesDiv = document.getElementById('nexus-chat-messages');
-      if (!messagesDiv) return;
-
-      const msg = document.createElement('div');
-      msg.className = 'mb-2 text-sm';
-      msg.innerHTML = `<span class="text-emerald-400">You:</span> ${input.value}`;
-      messagesDiv.appendChild(msg);
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
-      input.value = '';
-
-      // Placeholder AI reply
-      setTimeout(() => {
-        const reply = document.createElement('div');
-        reply.className = 'mb-2 text-sm text-zinc-400';
-        reply.textContent = 'Nexus: Got it. (Full AI integration coming in next phase)';
-        messagesDiv.appendChild(reply);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-      }, 600);
-    }
-
-    // Resize logic for Nexus panel
-    function startNexusResize(e) {
-      const panel = document.getElementById('nexus-panel');
-      nexusResizeData = {
-        startX: e.clientX,
-        startWidth: panel.offsetWidth
-      };
-      document.addEventListener('mousemove', doNexusResize);
-      document.addEventListener('mouseup', stopNexusResize);
-    }
-
-    function doNexusResize(e) {
-      if (!nexusResizeData) return;
-      const panel = document.getElementById('nexus-panel');
-      const newWidth = nexusResizeData.startWidth + (e.clientX - nexusResizeData.startX);
-      panel.style.width = Math.max(280, Math.min(520, newWidth)) + 'px';
-    }
-
-    function stopNexusResize() {
-      document.removeEventListener('mousemove', doNexusResize);
-      document.removeEventListener('mouseup', stopNexusResize);
-      nexusResizeData = null;
-      // Save preference
-      localStorage.setItem('nexusPanelWidth', document.getElementById('nexus-panel').style.width);
-    }
-
-    // Restore saved width on load
-    function restoreNexusWidth() {
-      const saved = localStorage.getItem('nexusPanelWidth');
-      if (saved) {
-        const panel = document.getElementById('nexus-panel');
-        if (panel) panel.style.width = saved;
-      }
-    }
-
-    // ... (keep all other existing functions: createSlot, refreshSlots, loadTemplate, runProject, etc.)
+    // ... (rest of the script remains the same as previous version)
 
     window.onload = async () => {
       newProject();
