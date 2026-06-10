@@ -31,7 +31,7 @@
       100% { background-position: 0% 50%; }
     }
 
-    /* Nexus Panel Styles for 1.1 */
+    /* Nexus Panel Styles */
     #nexus-panel {
       transition: width 0.1s ease;
       min-width: 280px;
@@ -242,6 +242,7 @@ project/
     let containerCounter = 0;
     let nexusResizeData = null;
 
+    // Clean Inception Template (the nice one with sacred geometry background)
     const INCEPTION_TEMPLATE = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -338,7 +339,7 @@ project/
             <i class="fas fa-sync-alt text-xs"></i> <span>Update Preview</span>
           </button>
         </div>
-        <textarea id="html-input" class="w-full h-[460px] bg-zinc-950/90 border border-zinc-800 rounded-3xl p-5 font-mono text-sm resize-y focus:outline-none focus:border-emerald-500/60" oninput="updatePreview()"><!-- Edit this HTML --></textarea>
+        <textarea id="html-input" class="w-full h-[460px] bg-zinc-950/90 border border-zinc-800 rounded-3xl p-5 font-mono text-sm resize-y focus:outline-none focus:border-emerald-500/60" oninput="updatePreview()"><!-- Start editing here --></textarea>
       </div>
 
       <div>
@@ -365,11 +366,6 @@ project/
       const frame = document.getElementById('preview-frame');
       frame.srcdoc = html;
     }
-    window.onload = function() {
-      const fullHTML = document.documentElement.outerHTML;
-      document.getElementById('html-input').value = fullHTML;
-      updatePreview();
-    };
   </script>
 </body>
 </html>`;
@@ -407,7 +403,7 @@ project/
       runProject();
     }
 
-    // ... (rest of the script remains the same as previous version)
+    // All other functions (toggleNexus, minimizeNexus, etc.) remain from previous version
 
     window.onload = async () => {
       newProject();
