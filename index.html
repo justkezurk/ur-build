@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>ur.space — hub</title>
+<style>
+:root{
+  --void:#050507;
+  --grid:#161a22;
+  --ink:#9aa3b2;
+  --dim:#4a5260;
+  --neon-p:#a86bff;
+  --neon-g:#41ffb0;
+  --neon-c:#4fd8ff;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+  user-select:none;-webkit-user-select:none}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;
+  position:fixed;inset:0;width:100%;background:var(--void);
+  font-family:ui-monospace,'SF Mono','Cascadia Mono','JetBrains Mono',Menlo,Consolas,monospace;
+  color:var(--ink)}
+.search{user-select:text;-webkit-user-select:text;touch-action:auto}
+canvas#bg{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+/* ---------- chrome ---------- */
+.brand{position:fixed;top:18px;left:22px;z-index:40;letter-spacing:.22em;font-size:13px;color:#cfd6e4}
+.brand b{color:var(--neon-g);font-weight:700}
+.signin{position:fixed;top:14px;right:22px;z-index:50;background:rgba(10,12,16,.72);
+  border:1px solid #232a36;color:#cfd6e4;font:inherit;font-size:11px;letter-spacing:.2em;
+  padding:9px 16px;cursor:pointer;backdrop-filter:blur(6px);
+  transition:border-color .25s, box-shadow .25s, color .25s}
+.signin:hover{border-color:var(--neon-p);color:#fff;box-shadow:0 0 18px rgba(168,107,255,.22)}
+.status{position:fixed;bottom:16px;left:22px;z-index:40;font-size:10px;letter-spacing:.18em;color:var(--dim)}
+.hint{position:fixed;bottom:16px;right:22px;z-index:40;font-size:10px;letter-spacing:.18em;color:var(--dim);text-align:right}
+
+/* ---------- search ---------- */
+.search-wrap{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:50;width:min(420px,46vw)}
+.search{width:100%;background:rgba(10,12,16,.72);border:1px solid #232a36;color:#dfe5ef;
+  font:inherit;font-size:13px;letter-spacing:.08em;padding:10px 14px;outline:none;
+  backdrop-filter:blur(6px);transition:border-color .25s, box-shadow .25s}
+.search::placeholder{color:var(--dim)}
+.search:focus{border-color:var(--neon-g);box-shadow:0 0 18px rgba(65,255,176,.18)}
+.results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:rgba(8,10,14,.92);
+  border:1px solid #232a36;display:none;backdrop-filter:blur(8px)}
+.results.open{display:block}
+.results button{display:block;width:100%;text-align:left;background:none;border:0;color:var(--ink);
+  font:inherit;font-size:12px;letter-spacing:.06em;padding:9px 14px;cursor:pointer}
+.results button:hover,.results button.sel{background:#141925;color:#fff}
+.results button .tag{float:right;color:var(--dim);font-size:10px}
+
+/* ---------- wheel ---------- */
+#stage{position:fixed;inset:0;z-index:20;touch-action:none;cursor:grab}
+#stage.dragging{cursor:grabbing}
+.hub{position:absolute;top:50%;left:50%;width:var(--wsz);height:var(--wsz);
+  margin:calc(var(--wsz)/-2) 0 0 calc(var(--wsz)/-2);
+  will-change:transform,opacity,filter;text-align:center;cursor:pointer}
+.hub canvas{width:100%;height:100%;display:block;pointer-events:none}
+.hub .name{position:absolute;left:50%;top:calc(100% - 6px);transform:translateX(-50%);
+  font-size:14px;letter-spacing:.34em;color:#e8edf6;white-space:nowrap;pointer-events:none;
+  text-shadow:0 0 14px rgba(168,107,255,.5);padding-left:.34em}
+.hub .tag{position:absolute;left:50%;top:calc(100% + 14px);transform:translateX(-50%);
+  font-size:9px;letter-spacing:.24em;color:var(--dim);white-space:nowrap;pointer-events:none;
+  opacity:0;transition:opacity .35s;padding-left:.24em}
+.hub.front .tag{opacity:1}
+.hub.warping{transition:transform .55s cubic-bezier(.6,-0.28,.74,.05),opacity .55s ease}
+
+/* enter ring around front item */
+#focusRing{position:absolute;top:50%;left:50%;width:calc(var(--wsz)*1.18);height:calc(var(--wsz)*1.18);
+  margin:calc(var(--wsz)*1.18/-2) 0 0 calc(var(--wsz)*1.18/-2);
+  border-radius:50%;border:1px solid rgba(65,255,176,.16);pointer-events:none;z-index:19;
+  box-shadow:0 0 60px rgba(65,255,176,.05) inset;
+  animation:ringPulse 4.5s ease-in-out infinite}
+@keyframes ringPulse{0%,100%{transform:scale(1);opacity:.55}50%{transform:scale(1.04);opacity:1}}
+
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:90;transition:opacity .4s}
+
+.hub.deny{animation:deny .45s ease}
+@keyframes deny{
+  0%,100%{margin-left:calc(var(--wsz)/-2)}
+  20%,60%{margin-left:calc(var(--wsz)/-2 - 9px)}
+  40%,80%{margin-left:calc(var(--wsz)/-2 + 9px)}
+}
+
+@media (prefers-reduced-motion: reduce){
+  #focusRing{animation:none}
+}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+
+<div class="brand">urbuild<b>.</b>space</div>
+<button id="signin" class="signin">SIGN IN</button>
+
+<div class="search-wrap">
+  <input id="search" class="search" type="text" placeholder="search platforms…" autocomplete="off" spellcheck="false">
+  <div id="results" class="results"></div>
+</div>
+
+<div id="stage"><div id="focusRing"></div></div>
+
+<div class="status" id="status">SYS // IDLE</div>
+<div class="hint">DRAG · SCROLL · ←&nbsp;→ · CLICK TO ENTER</div>
+<div id="flash"></div>
+
+<script>
+'use strict';
+/* ================================================================ 
+   ur.space — rotary hub
+   single-file · vanilla JS · no frameworks · no build tools
+   ================================================================ */
+
+/* ---------- CONFIG: edit hubs + destinations here ----------
+   href:'' (empty) = hub offline → deny shake + status, no navigation */
+const HUBS = [
+  { id:'daw',    name:'DAW',     tag:'SEARCHING FOR THE SOUND', href:'/daw/',
+    glyph:'torus',  c1:'#a86bff', c2:'#41ffb0' },
+  { id:'forge',  name:'FORGE3D', tag:'DCC · DCT',               href:'',
+    glyph:'icosa',  c1:'#4fd8ff', c2:'#a86bff' },
+  { id:'ide',    name:'IDE',     tag:'CODE · COLLAB · MOLAB',   href:'/ide/',
+    glyph:'cube',   c1:'#41ffb0', c2:'#4fd8ff' },
+  { id:'social', name:'SOCIAL',  tag:'PROFILES · MESSAGING',    href:'',
+    glyph:'dodeca', c1:'#a86bff', c2:'#4fd8ff' },
+  { id:'p2p',    name:'P2P',     tag:'TRADE · DELIVERY · MARKET', href:'',
+    glyph:'octa',   c1:'#41ffb0', c2:'#a86bff' },
+  { id:'swei',   name:'SWEI',    tag:'AI · AGENTS',             href:'',
+    glyph:'stella', c1:'#4fd8ff', c2:'#41ffb0' },
+];
+
+/* ---------- session adapter stub ----------
+   Guest-first spine seed. Supabase auth swaps in BEHIND this same
+   interface in the auth phase — no upstream code changes, never blocks. */
+const URSession = {
+  get id(){
+    let g = localStorage.getItem('ur.session.guest');
+    if(!g){
+      g = 'guest-' + Math.random().toString(36).slice(2,10);
+      localStorage.setItem('ur.session.guest', g);
+    }
+    return g;
+  },
+  authed: false,               // flipped by Supabase adapter later
+  gate(hubId){ return true; }  // throttle placeholder — enforced at final phase
+};
+window.URSession = URSession;
+
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const TAU = Math.PI * 2;
+
+/* ================================================================ 
+   TINY 3D ENGINE — rotate, project, stroke wireframes
+   ================================================================ */
+function rot3(v, ax, ay, az){
+  let [x,y,z] = v, c, s, t;
+  c = Math.cos(ax); s = Math.sin(ax); t = y*c - z*s; z = y*s + z*c; y = t;
+  c = Math.cos(ay); s = Math.sin(ay); t = x*c + z*s; z = -x*s + z*c; x = t;
+  c = Math.cos(az); s = Math.sin(az); t = x*c - y*s; y = x*s + y*c; x = t;
+  return [x,y,z];
+}
+function project(v, half, persp){
+  const f = persp / (persp - v[2]);
+  return [half + v[0]*f*half*0.78, half + v[1]*f*half*0.78, f];
+}
+/* build edges by connecting vertex pairs at the minimum pair distance */
+function autoEdges(verts){
+  let min = Infinity;
+  const d2 = (a,b)=>{const dx=a[0]-b[0],dy=a[1]-b[1],dz=a[2]-b[2];return dx*dx+dy*dy+dz*dz;};
+  for(let i=0;i<verts.length;i++)for(let j=i+1;j<verts.length;j++){
+    const d=d2(verts[i],verts[j]); if(d<min-1e-9) min=d;
+  }
+  const edges=[];
+  for(let i=0;i<verts.length;i++)for(let j=i+1;j<verts.length;j++){
+    if(Math.abs(d2(verts[i],verts[j])-min)<1e-6) edges.push([i,j]);
+  }
+  return edges;
+}
+function norm(verts){
+  let m=0; verts.forEach(v=>{m=Math.max(m,Math.hypot(v[0],v[1],v[2]));});
+  return verts.map(v=>[v[0]/m,v[1]/m,v[2]/m]);
+}
+
+/* ---------- platonic solids ---------- */
+const PHI = (1+Math.sqrt(5))/2;
+function tetra(){
+  return norm([[1,1,1],[1,-1,-1],[-1,1,-1],[-1,-1,1]]);
+}
+function cube(){
+  const v=[]; for(const x of[-1,1])for(const y of[-1,1])for(const z of[-1,1])v.push([x,y,z]);
+  return norm(v);
+}
+function octa(){
+  return norm([[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]);
+}
+function icosa(){
+  const v=[];
+  for(const a of[-1,1])for(const b of[-PHI,PHI]){
+    v.push([0,a,b]); v.push([a,b,0]); v.push([b,0,a]);
+  }
+  return norm(v);
+}
+function dodeca(){
+  const v=[]; const ip=1/PHI;
+  for(const x of[-1,1])for(const y of[-1,1])for(const z of[-1,1])v.push([x,y,z]);
+  for(const a of[-ip,ip])for(const b of[-PHI,PHI]){
+    v.push([0,a,b]); v.push([a,b,0]); v.push([b,0,a]);
+  }
+  return norm(v);
+}
+/* star tetrahedron — two interpenetrating tetrahedra (SWEI) */
+function stella(){
+  const t1 = tetra();
+  const t2 = t1.map(v=>[-v[0],-v[1],-v[2]]);
+  const verts = t1.concat(t2);
+  const e1 = autoEdges(t1);
+  const e2 = autoEdges(t2).map(e=>[e[0]+4, e[1]+4]);
+  return { verts, edges: e1.concat(e2) };
+}
+/* parametric torus wireframe (DAW) */
+function torus(majSeg, minSeg, R, r){
+  const verts=[], edges=[];
+  for(let i=0;i<majSeg;i++){
+    const u = i/majSeg*TAU;
+    for(let j=0;j<minSeg;j++){
+      const v = j/minSeg*TAU;
+      const cx=(R + r*Math.cos(v));
+      verts.push([cx*Math.cos(u), r*Math.sin(v), cx*Math.sin(u)]);
+      const idx=i*minSeg+j;
+      edges.push([idx, i*minSeg + (j+1)%minSeg]);            // minor ring
+      edges.push([idx, ((i+1)%majSeg)*minSeg + j]);          // major ring
+    }
+  }
+  return { verts: norm(verts), edges };
+}
+function solid(verts){ return { verts, edges: autoEdges(verts) }; }
+
+const GLYPHS = {
+  torus : torus(18, 9, 1, 0.42),
+  icosa : solid(icosa()),
+  cube  : solid(cube()),
+  dodeca: solid(dodeca()),
+  octa  : solid(octa()),
+  stella: stella(),
+  tetra : solid(tetra()),
+};
+
+/* draw one wireframe into a 2d ctx with depth-faded neon strokes */
+function drawWire(ctx, size, model, ax, ay, az, c1, c2, glow, alpha){
+  const half = size/2, persp = 3.4;
+  const pts = model.verts.map(v=>project(rot3(v, ax, ay, az), half, persp));
+  ctx.lineWidth = Math.max(1, size*0.008);
+  ctx.lineCap = 'round';
+  for(const [a,b] of model.edges){
+    const pa=pts[a], pb=pts[b];
+    const depth=(pa[2]+pb[2])/2;                 // ~0.7 back … ~1.5 front
+    const t=Math.min(1, Math.max(0,(depth-0.72)/0.75));
+    ctx.strokeStyle = t>0.5 ? c1 : c2;
+    ctx.globalAlpha = alpha*(0.18 + t*0.82);
+    ctx.shadowColor = t>0.5 ? c1 : c2;
+    ctx.shadowBlur  = glow*t;
+    ctx.beginPath(); ctx.moveTo(pa[0],pa[1]); ctx.lineTo(pb[0],pb[1]); ctx.stroke();
+  }
+  ctx.globalAlpha=1; ctx.shadowBlur=0;
+}
+
+/* ================================================================ 
+   BACKGROUND — randomized grid + drifting platonic solids
+   ================================================================ */
+const bg = document.getElementById('bg');
+const bgx = bg.getContext('2d');
+let BW=0, BH=0, DPR=1;
+let gridCanvas = null;
+let drifters = [];
+
+function buildGrid(){
+  gridCanvas = document.createElement('canvas');
+  gridCanvas.width = BW; gridCanvas.height = BH;
+  const g = gridCanvas.getContext('2d');
+  g.fillStyle = '#050507'; g.fillRect(0,0,BW,BH);
+  /* irregular line spacing — "almost randomized" grid */
+  const xs=[0], ys=[0];
+  let p=0;
+  while(p < BW){ p += (28 + Math.random()*110)*DPR; xs.push(Math.round(p)); }
+  p=0;
+  while(p < BH){ p += (28 + Math.random()*110)*DPR; ys.push(Math.round(p)); }
+  g.lineWidth = 1;
+  g.strokeStyle = 'rgba(120,135,165,0.07)';
+  g.beginPath();
+  xs.forEach(x=>{ g.moveTo(x+0.5,0); g.lineTo(x+0.5,BH); });
+  ys.forEach(y=>{ g.moveTo(0,y+0.5); g.lineTo(BW,y+0.5); });
+  g.stroke();
+  /* sparse brighter ticks at intersections */
+  g.fillStyle = 'rgba(160,180,215,0.12)';
+  xs.forEach(x=>ys.forEach(y=>{
+    if(Math.random() < 0.06) g.fillRect(x-1, y-1, 3, 3);
+  }));
+  /* a few faint filled cells */
+  g.fillStyle = 'rgba(110,125,160,0.035)';
+  for(let i=0;i<xs.length-1;i++)for(let j=0;j<ys.length-1;j++){
+    if(Math.random() < 0.05) g.fillRect(xs[i], ys[j], xs[i+1]-xs[i], ys[j+1]-ys[j]);
+  }
+  /* vignette so the wheel zone stays darkest-clean */
+  const vg = g.createRadialGradient(BW/2,BH/2,Math.min(BW,BH)*0.18, BW/2,BH/2,Math.max(BW,BH)*0.75);
+  vg.addColorStop(0,'rgba(5,5,7,0.55)');
+  vg.addColorStop(1,'rgba(5,5,7,0)');
+  g.fillStyle = vg; g.fillRect(0,0,BW,BH);
+}
+
+function buildDrifters(){
+  const kinds=['tetra','cube','octa','icosa','dodeca'];
+  drifters = kinds.map((k,i)=>({
+    model: GLYPHS[k],
+    x: Math.random()*BW, y: Math.random()*BH,
+    vx: (Math.random()-0.5)*0.06*DPR, vy:(Math.random()-0.5)*0.06*DPR,
+    ax: Math.random()*TAU, ay: Math.random()*TAU, az: Math.random()*TAU,
+    sx:(Math.random()-0.5)*0.0016, sy:(Math.random()-0.5)*0.0016, sz:(Math.random()-0.5)*0.0016,
+    size:(110 + Math.random()*180)*DPR,
+    alpha:0.05 + Math.random()*0.06,
+  }));
+}
+
+function drawBackground(){
+  bgx.clearRect(0,0,BW,BH);
+  bgx.drawImage(gridCanvas,0,0);
+  for(const d of drifters){
+    if(!REDUCED){
+      d.x+=d.vx; d.y+=d.vy; d.ax+=d.sx; d.ay+=d.sy; d.az+=d.sz;
+      const m=d.size;
+      if(d.x<-m) d.x=BW+m; if(d.x>BW+m) d.x=-m;
+      if(d.y<-m) d.y=BH+m; if(d.y>BH+m) d.y=-m;
+    }
+    bgx.save();
+    bgx.translate(d.x - d.size/2, d.y - d.size/2);
+    drawWire(bgx, d.size, d.model, d.ax, d.ay, d.az,
+      'rgba(150,170,210,1)','rgba(110,125,160,1)', 0, d.alpha);
+    bgx.restore();
+  }
+}
+
+/* ================================================================ 
+   THE WHEEL
+   ================================================================ */
+const stage = document.getElementById('stage');
+const statusEl = document.getElementById('status');
+const flash = document.getElementById('flash');
+const N = HUBS.length;
+const STEP = TAU / N;
+
+let WSZ = 0;          // widget css px
+let RADIUS = 0;       // wheel css px radius
+let rotation = 0;     // radians; hub i sits at front when rotation ≈ -i*STEP
+let velocity = 0;
+let snapTarget = null;
+let dragging = false;
+let warping = false;
+let warpIdx = -1;
+let lastFront = -1;
+
+const hubEls = HUBS.map((h, i)=>{
+  const el = document.createElement('div');
+  el.className = 'hub';
+  const cv = document.createElement('canvas');
+  const nm = document.createElement('div'); nm.className='name'; nm.textContent=h.name;
+  const tg = document.createElement('div'); tg.className='tag';  tg.textContent=h.tag;
+  el.appendChild(cv); el.appendChild(nm); el.appendChild(tg);
+  el.addEventListener('click', ()=>onHubClick(i));
+  stage.appendChild(el);
+  return { el, cv, ctx: cv.getContext('2d'), spin: Math.random()*TAU };
+});
+
+function layout(){
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  BW = bg.width  = Math.round(innerWidth * DPR);
+  BH = bg.height = Math.round(innerHeight * DPR);
+  buildGrid();
+  if(!drifters.length) buildDrifters();
+
+  WSZ = Math.round(Math.min(innerWidth, innerHeight) * 0.30);
+  WSZ = Math.max(120, Math.min(260, WSZ));
+  RADIUS = Math.min(innerWidth * 0.36, innerHeight * 0.30);
+  document.documentElement.style.setProperty('--wsz', WSZ + 'px');
+  const px = Math.round(WSZ * DPR);
+  hubEls.forEach(h=>{ h.cv.width = px; h.cv.height = px; });
+}
+
+function frontIndex(){
+  /* hub whose angle is closest to 0 (front) */
+  let best=0, bd=Infinity;
+  for(let i=0;i<N;i++){
+    let a = (rotation + i*STEP) % TAU;
+    if(a > Math.PI) a -= TAU; if(a < -Math.PI) a += TAU;
+    const d = Math.abs(a);
+    if(d < bd){ bd=d; best=i; }
+  }
+  return best;
+}
+
+function nearestSnap(){
+  return Math.round(rotation / STEP) * STEP;
+}
+
+function updateWheel(dt, t){
+  /* physics */
+  if(!dragging && !warping){
+    if(snapTarget !== null){
+      const diff = snapTarget - rotation;
+      rotation += diff * Math.min(1, dt*0.011);
+      if(Math.abs(diff) < 0.0005){ rotation = snapTarget; snapTarget = null; }
+    } else {
+      rotation += velocity * dt;
+      velocity *= Math.pow(0.994, dt);
+      if(Math.abs(velocity) < 0.00012){ velocity = 0; snapTarget = nearestSnap(); }
+    }
+  }
+
+  const fi = frontIndex();
+  if(fi !== lastFront){
+    lastFront = fi;
+    statusEl.textContent = 'SYS // ' + HUBS[fi].name + ' — ' + HUBS[fi].tag;
+  }
+
+  const cx = innerWidth/2, cy = innerHeight/2 + WSZ*0.04;
+  for(let i=0;i<N;i++){
+    const h = HUBS[i], e = hubEls[i];
+    const a = rotation + i*STEP;
+    const x = Math.sin(a) * RADIUS;
+    const z = Math.cos(a);                       // 1 front … -1 back
+    const depth = (z+1)/2;                       // 0..1
+    const scale = 0.42 + depth*0.62;
+    const y = -z * RADIUS * 0.16;                // slight elliptical tilt
+    const front = (i===fi && depth>0.86);
+
+    if(!(warping && i === warpIdx)){
+      e.el.style.transform =
+        `translate(${(cx - innerWidth/2 + x).toFixed(2)}px, ${(y).toFixed(2)}px) scale(${scale.toFixed(3)})`;
+      e.el.style.left = '50%';
+      e.el.style.top = (cy/innerHeight*100).toFixed(2) + '%';
+    }
+    e.el.style.zIndex = 20 + Math.round(depth*20);
+    e.el.style.opacity = (0.28 + depth*0.72).toFixed(3);
+    e.el.style.filter = front ? 'none' : `blur(${((1-depth)*2.2).toFixed(2)}px)`;
+    e.el.classList.toggle('front', front);
+
+    /* render glyph */
+    const ctx = e.ctx, px = e.cv.width;
+    ctx.clearRect(0,0,px,px);
+    if(!REDUCED || dragging || snapTarget!==null) e.spin += dt*0.0005*(front?1.4:0.7);
+    const breathe = front && !REDUCED ? 1 + Math.sin(t*0.0021)*0.02 : 1;
+    ctx.save();
+    ctx.translate(px/2,px/2); ctx.scale(breathe,breathe); ctx.translate(-px/2,-px/2);
+    drawWire(ctx, px, GLYPHS[h.glyph],
+      e.spin*0.6, e.spin, e.spin*0.35,
+      h.c1, h.c2,
+      front ? px*0.10 : px*0.03,
+      front ? 1 : 0.6);
+    ctx.restore();
+  }
+
+  /* focus ring follows the front slot position */
+  const ring = document.getElementById('focusRing');
+  ring.style.top = (cy/innerHeight*100).toFixed(2) + '%';
+  ring.style.borderColor = hexA(HUBS[fi].c2, 0.18);
+}
+
+function hexA(hex, a){
+  const n = parseInt(hex.slice(1),16);
+  return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;
+}
+
+/* ---------- navigate to a hub: spin it to front ---------- */
+function spinTo(i){
+  /* choose the shortest equivalent target angle */
+  const base = -i*STEP;
+  const k = Math.round((rotation - base)/TAU);
+  snapTarget = base + k*TAU;
+  velocity = 0;
+}
+
+/* ---------- click: enter if front, else rotate to front ---------- */
+function onHubClick(i){
+  if(warping || dragMoved) return;
+  if(i === frontIndex() && snapTarget === null && Math.abs(velocity) < 0.0003){
+    enterHub(i);
+  } else {
+    spinTo(i);
+  }
+}
+
+function enterHub(i){
+  const h = HUBS[i], e = hubEls[i];
+  if(!h.href){
+    /* hub not deployed yet — deny shake, no navigation */
+    statusEl.textContent = 'SYS // ' + h.name + ' — OFFLINE · COMING ONLINE';
+    e.el.classList.remove('deny'); void e.el.offsetWidth;
+    e.el.classList.add('deny');
+    return;
+  }
+  warping = true; warpIdx = i;
+  statusEl.textContent = 'SYS // ENTERING ' + h.name + ' …';
+  /* pulse twice, then warp in (homage to the original widget) */
+  let pulse = 0;
+  const baseT = e.el.style.transform;
+  const pulseInt = setInterval(()=>{
+    pulse += 0.32;
+    const s = 1 + Math.sin(pulse)*0.07;
+    e.el.style.transform = baseT + ` scale(${s})`;
+    if(pulse > Math.PI*2){
+      clearInterval(pulseInt);
+      e.el.classList.add('warping');
+      e.el.style.transform = baseT + ' scale(0.04) rotate(180deg)';
+      e.el.style.opacity = '0';
+      flash.style.opacity = '0.9';
+      setTimeout(()=>{
+        window.location.href = h.href;
+        /* demo fallback if href is an anchor: restore */
+        setTimeout(()=>{
+          flash.style.opacity = '0';
+          e.el.classList.remove('warping');
+          e.el.style.opacity = '';
+          warping = false; warpIdx = -1;
+        }, 500);
+      }, 560);
+    }
+  }, 40);
+}
+
+/* ================================================================ 
+   INPUT — drag / wheel / keys
+   ================================================================ */
+let dragX = 0, dragLastT = 0, dragMoved = false;
+stage.addEventListener('pointerdown', ev=>{
+  if(warping) return;
+  dragging = true; dragMoved = false;
+  dragX = ev.clientX; dragLastT = performance.now();
+  velocity = 0; snapTarget = null;
+  stage.classList.add('dragging');
+  stage.setPointerCapture(ev.pointerId);
+});
+stage.addEventListener('pointermove', ev=>{
+  if(!dragging) return;
+  const dx = ev.clientX - dragX;
+  if(Math.abs(dx) > 4) dragMoved = true;
+  dragX = ev.clientX;
+  const now = performance.now();
+  const dt = Math.max(8, now - dragLastT); dragLastT = now;
+  const dRot = dx / RADIUS * 0.55;
+  rotation += dRot;
+  /* low-pass the instantaneous velocity so release momentum is smooth */
+  const inst = Math.max(-0.012, Math.min(0.012, dRot / dt));
+  velocity = velocity*0.7 + inst*0.3;
+});
+function endDrag(){
+  if(!dragging) return;
+  dragging = false;
+  stage.classList.remove('dragging');
+  if(Math.abs(velocity) < 0.0005) snapTarget = nearestSnap();
+  setTimeout(()=>{ dragMoved = false; }, 0);
+}
+stage.addEventListener('pointerup', endDrag);
+stage.addEventListener('pointercancel', endDrag);
+
+addEventListener('wheel', ev=>{
+  ev.preventDefault();
+  if(warping) return;
+  const d = (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY);
+  snapTarget = null;
+  velocity += d * -0.000012;
+}, {passive:false});
+
+/* kill iOS rubber-band / pull-to-refresh everywhere except the search field */
+document.addEventListener('touchmove', ev=>{
+  if(!ev.target.closest('.search')) ev.preventDefault();
+}, {passive:false});
+
+addEventListener('keydown', ev=>{
+  if(warping) return;
+  if(ev.key === 'ArrowLeft'){ spinTo((frontIndex()+1)%N); }
+  else if(ev.key === 'ArrowRight'){ spinTo((frontIndex()-1+N)%N); }
+  else if(ev.key === 'Enter' && document.activeElement !== searchEl){ enterHub(frontIndex()); }
+});
+
+/* ================================================================ 
+   SEARCH
+   ================================================================ */
+const searchEl  = document.getElementById('search');
+const resultsEl = document.getElementById('results');
+let selIdx = 0, matches = [];
+
+function renderResults(){
+  resultsEl.innerHTML = '';
+  if(!matches.length){ resultsEl.classList.remove('open'); return; }
+  matches.forEach((m, i)=>{
+    const b = document.createElement('button');
+    b.innerHTML = m.name + '<span class="tag">' + m.tag + '</span>';
+    if(i===selIdx) b.classList.add('sel');
+    b.addEventListener('click', ()=>pick(m));
+    resultsEl.appendChild(b);
+  });
+  resultsEl.classList.add('open');
+}
+function pick(hub){
+  searchEl.value = ''; matches = []; renderResults();
+  searchEl.blur();
+  spinTo(HUBS.indexOf(hub));
+}
+searchEl.addEventListener('input', ()=>{
+  const q = searchEl.value.trim().toLowerCase();
+  selIdx = 0;
+  matches = !q ? [] : HUBS.filter(h =>
+    h.name.toLowerCase().includes(q) ||
+    h.tag.toLowerCase().includes(q) ||
+    h.id.includes(q));
+  renderResults();
+});
+searchEl.addEventListener('keydown', ev=>{
+  if(!matches.length) return;
+  if(ev.key === 'ArrowDown'){ selIdx = (selIdx+1)%matches.length; renderResults(); ev.preventDefault(); }
+  else if(ev.key === 'ArrowUp'){ selIdx = (selIdx-1+matches.length)%matches.length; renderResults(); ev.preventDefault(); }
+  else if(ev.key === 'Enter'){ pick(matches[selIdx]); ev.preventDefault(); }
+  else if(ev.key === 'Escape'){ matches=[]; renderResults(); searchEl.blur(); }
+});
+document.addEventListener('pointerdown', ev=>{
+  if(!ev.target.closest('.search-wrap')){ matches=[]; renderResults(); }
+});
+
+/* ---------- sign-in placeholder (auth spine — future phase) ---------- */
+document.getElementById('signin').addEventListener('click', ()=>{
+  statusEl.textContent = 'SYS // AUTH SPINE PENDING · BROWSING AS ' + URSession.id.toUpperCase();
+});
+
+/* ================================================================ 
+   MAIN LOOP
+   ================================================================ */
+let lastT = performance.now();
+function loop(t){
+  const dt = Math.min(50, t - lastT); lastT = t;
+  drawBackground();
+  updateWheel(dt, t);
+  requestAnimationFrame(loop);
+}
+
+addEventListener('resize', layout);
+layout();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
