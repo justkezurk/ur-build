@@ -1,6 +1,1023 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8">
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>ur.space — DAW · node matrix</title>
+<style>
+:root{
+  --void:#050507; --panel:#0a0c10; --line:#232a36;
+  --ink:#9aa3b2; --dim:#4a5260;
+  --neon-p:#a86bff; --neon-g:#41ffb0; --neon-c:#4fd8ff; --warn:#ff5d6c;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+  user-select:none;-webkit-user-select:none}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;
+  position:fixed;inset:0;width:100%;background:var(--void);
+  font-family:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;color:var(--ink)}
+
+/* ---------- header ---------- */
+header{position:fixed;top:0;left:0;right:0;height:46px;z-index:80;display:flex;
+  align-items:center;gap:8px;padding:0 10px;background:rgba(8,10,14,.82);
+  border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+header .back{color:var(--neon-g);text-decoration:none;font-size:13px;letter-spacing:.1em;flex:none}
+header .brand{letter-spacing:.18em;font-size:12px;color:#cfd6e4;white-space:nowrap;flex:none}
+header .brand b{color:var(--neon-p)}
+header .sp{flex:1;min-width:0}
+header .tools{display:flex;align-items:center;gap:6px;flex:none}
+.hbtn{background:none;border:1px solid var(--line);color:var(--ink);font:inherit;
+  font-size:10px;letter-spacing:.16em;padding:7px 11px;cursor:pointer;white-space:nowrap;
+  transition:border-color .2s,color .2s}
+.hbtn:hover{border-color:var(--neon-g);color:#fff}
+.hbtn.active{border-color:var(--neon-p);color:var(--neon-p);
+  box-shadow:0 0 14px rgba(168,107,255,.25)}
+@media (max-width:520px){
+  header{gap:6px;padding:0 8px}
+  header .bpre{display:none}
+  header .brand{letter-spacing:.12em;font-size:11px}
+  .hbtn{letter-spacing:.1em;padding:7px 9px}
+  header .tools{gap:5px}
+}
+
+/* ---------- matrix field (bordered, contained) ---------- */
+#field{position:fixed;inset:54px 8px 38px 8px;z-index:10;cursor:grab;
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  background-color:var(--void);
+  background-image:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='60'%20height='60'%3E%3Cg%20fill='none'%20stroke='rgba(150,160,175,0.11)'%20stroke-width='1'%3E%3Ccircle%20cx='0'%20cy='0'%20r='30'/%3E%3Ccircle%20cx='30'%20cy='0'%20r='30'/%3E%3Ccircle%20cx='60'%20cy='0'%20r='30'/%3E%3Ccircle%20cx='0'%20cy='30'%20r='30'/%3E%3Ccircle%20cx='30'%20cy='30'%20r='30'/%3E%3Ccircle%20cx='60'%20cy='30'%20r='30'/%3E%3Ccircle%20cx='0'%20cy='60'%20r='30'/%3E%3Ccircle%20cx='30'%20cy='60'%20r='30'/%3E%3Ccircle%20cx='60'%20cy='60'%20r='30'/%3E%3C/g%3E%3C/svg%3E");
+  background-size:60px 60px;background-position:20px 20px}
+#field.panning{cursor:grabbing}
+
+/* ---------- MOD dropdown ---------- */
+#modmenu{position:fixed;z-index:85;min-width:210px;background:#0b0e13;border:1px solid var(--line);
+  border-radius:10px;box-shadow:0 12px 34px rgba(0,0,0,.6);padding:6px;display:none;left:10px;top:50px}
+#modmenu.open{display:block}
+#modmenu h5{font-size:9px;letter-spacing:.2em;color:var(--dim);margin:4px 8px 8px}
+.mitem{display:flex;align-items:center;gap:9px;padding:9px 8px;border-radius:7px;cursor:pointer}
+.mitem:active{background:#141a22}
+.mitem .sw{width:9px;height:9px;border-radius:50%;flex:none;background:var(--dim)}
+.mitem .mn{font-size:11px;letter-spacing:.1em;color:#dfe5ef;flex:1;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.mitem .mtag{font-size:8px;letter-spacing:.16em;color:var(--dim);border:1px solid var(--line);
+  border-radius:5px;padding:3px 6px}
+.mitem.on .mtag{color:var(--neon-p);border-color:var(--neon-p)}
+
+/* ---------- connection badges + node settings ---------- */
+#badgeLayer{position:absolute;left:0;top:0}
+.badge{position:absolute;min-width:16px;height:16px;padding:0 5px;border-radius:8px;
+  font:700 8px/16px ui-monospace,monospace;text-align:center;color:#05080b;
+  letter-spacing:.04em;cursor:pointer;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.5);
+  border:1px solid rgba(0,0,0,.4);z-index:7}
+.badge.gear{background:#11202a;color:#9fe9f2;border-color:#2f6b78}
+.badge.stack{background:#a86bff;color:#0a0510}
+#btip{position:fixed;z-index:130;transform:translate(-50%,-100%);background:#0b0e13;
+  border:1px solid var(--line);border-radius:6px;padding:5px 8px;font:600 9px/1.2 ui-monospace,monospace;
+  letter-spacing:.06em;color:#dfe5ef;pointer-events:none;opacity:0;transition:opacity .12s;
+  white-space:nowrap;max-width:60vw;overflow:hidden;text-overflow:ellipsis}
+#btip.show{opacity:1}
+#nodemenu{position:fixed;z-index:86;min-width:208px;max-width:84vw;background:#0b0e13;
+  border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 34px rgba(0,0,0,.6);
+  padding:6px;display:none}
+#nodemenu.open{display:block}
+#nodemenu h5{font-size:9px;letter-spacing:.18em;color:var(--dim);margin:4px 8px 8px}
+#nodemenu .nmempty{font-size:10px;color:var(--dim);padding:8px;letter-spacing:.08em}
+#nodemenu .nmrow{display:flex;align-items:center;gap:8px;padding:5px 6px}
+#nodemenu .nmtog{flex:none;font:700 8px/1 ui-monospace,monospace;color:var(--dim);background:none;
+  border:1px solid var(--line);border-radius:5px;padding:6px 8px;cursor:pointer;min-width:34px}
+#nodemenu .nmtog.on{color:var(--neon-g);border-color:var(--neon-g)}
+#nodemenu .nmname{flex:1;min-width:0;background:#0a0f14;border:1px solid var(--line);border-radius:5px;
+  color:#dfe5ef;font:inherit;font-size:10px;letter-spacing:.04em;padding:6px 7px}
+canvas#wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#world{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+
+/* ---------- nodes ---------- */
+.node{position:absolute;width:172px;background:rgba(10,12,16,.92);
+  border:1px solid var(--line);cursor:grab;z-index:20;
+  box-shadow:0 4px 24px rgba(0,0,0,.5)}
+.node:active{cursor:grabbing}
+.node .nhead{display:flex;align-items:center;gap:7px;padding:9px 10px;
+  border-bottom:1px solid var(--line)}
+.node .dot{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:none}
+.node.live .dot{background:var(--neon-g);box-shadow:0 0 8px var(--neon-g)}
+.node.offline .dot{background:var(--warn);box-shadow:0 0 6px rgba(255,93,108,.6)}
+.node .nname{font-size:10px;letter-spacing:.14em;color:#dfe5ef;flex:1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.node .nbody{display:flex;align-items:center;justify-content:space-between;padding:8px 10px}
+.node .open{background:none;border:1px solid var(--line);color:var(--ink);font:inherit;
+  font-size:9px;letter-spacing:.18em;padding:6px 10px;cursor:pointer}
+.node.live .open:hover{border-color:var(--neon-g);color:#fff}
+.node.offline .open{opacity:.4;cursor:default}
+.node .stat{font-size:8px;letter-spacing:.14em;color:var(--dim)}
+.node .port{width:13px;height:13px;border-radius:50%;border:1px solid var(--line);
+  background:var(--panel);position:absolute;top:50%;margin-top:-7px;cursor:pointer;
+  transition:box-shadow .2s,border-color .2s}
+.node .port.in{left:-7px}
+.node .port.out{right:-7px}
+.node .port:hover,.node .port.hot{border-color:var(--neon-c);
+  box-shadow:0 0 10px var(--neon-c)}
+.node.wiresrc{border-color:var(--neon-c);box-shadow:0 0 20px rgba(79,216,255,.3)}
+.node .nresize{position:absolute;right:0;bottom:0;width:20px;height:20px;cursor:se-resize;
+  touch-action:none;z-index:6}
+.node .nresize::after{content:'';position:absolute;right:3px;bottom:3px;width:8px;height:8px;
+  border-right:2px solid var(--dim);border-bottom:2px solid var(--dim)}
+.node .nresize:active::after{border-color:var(--neon-c)}
+
+/* ---------- windows ---------- */
+.win{position:fixed;z-index:60;background:#07090d;border:1px solid var(--line);
+  display:flex;flex-direction:column;box-shadow:0 10px 50px rgba(0,0,0,.7);
+  min-width:260px;min-height:200px}
+.win.top{border-color:#39435a;z-index:61}
+.win .whead{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;
+  background:rgba(12,15,20,.95);border-bottom:1px solid var(--line);cursor:grab;flex:none}
+.win .wtitle{font-size:10px;letter-spacing:.16em;color:#dfe5ef;flex:1;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.win .wbtn{background:none;border:1px solid var(--line);border-radius:5px;padding:0;
+  width:24px;height:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
+.win .wbtn + .wbtn{margin-left:4px}
+.win .wbtn:hover{border-color:var(--ink)}
+.win .wbtn:active{background:rgba(255,255,255,.06)}
+.wico{width:14px;height:14px;display:block;pointer-events:none}
+.node .ndclose{background:none;border:0;padding:0;flex:none;width:18px;height:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;opacity:.85}
+.node .ndclose:active{opacity:1}
+.node .ndclose .wico{width:13px;height:13px}
+.win iframe{flex:1;border:0;width:100%;background:#050507}
+.win.full{inset:0 !important;width:auto !important;height:auto !important;border-radius:0}
+@media (max-width:700px){
+  .win{inset:46px 0 0 0 !important;width:auto !important;height:auto !important;
+    min-width:0;min-height:0}
+}
+
+/* ---------- bus log drawer ---------- */
+#drawer{position:fixed;left:0;right:0;bottom:0;z-index:70;background:rgba(8,10,14,.94);
+  border-top:1px solid var(--line);backdrop-filter:blur(8px);
+  transform:translateY(calc(100% - 30px));transition:transform .3s ease}
+#drawer.open{transform:translateY(0)}
+#drawer .dhead{height:30px;display:flex;align-items:center;gap:12px;padding:0 14px;
+  cursor:pointer;font-size:9px;letter-spacing:.2em;color:var(--dim)}
+#log{height:160px;overflow-y:auto;padding:4px 14px 12px;font-size:9px;
+  line-height:1.7;color:var(--ink);touch-action:pan-y;user-select:text;-webkit-user-select:text}
+#log .f{color:var(--neon-p)} #log .t{color:var(--neon-g)} #log .c{color:var(--neon-c)}
+
+#toast{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:90;
+  background:rgba(10,12,16,.95);border:1px solid var(--line);color:#dfe5ef;
+  font-size:10px;letter-spacing:.14em;padding:9px 16px;opacity:0;pointer-events:none;
+  transition:opacity .3s;max-width:88vw;text-align:center}
+#toast.show{opacity:1}
+
+/* ---------- confirm modal ---------- */
+.cmodal{position:fixed;inset:0;z-index:120;display:none;align-items:center;justify-content:center;
+  background:rgba(3,4,6,.6);backdrop-filter:blur(3px)}
+.cmodal.open{display:flex}
+.cbox{background:#0b0e13;border:1px solid var(--line);border-radius:12px;padding:18px;
+  width:300px;max-width:84vw;box-shadow:0 18px 50px rgba(0,0,0,.7)}
+.cmsg{font-size:11px;line-height:1.6;letter-spacing:.05em;color:#dfe5ef;margin-bottom:16px}
+.crow{display:flex;gap:8px;justify-content:flex-end}
+.hbtn.cwarn{border-color:var(--warn);color:var(--warn)}
+
+#zoomctl{position:fixed;right:16px;bottom:48px;z-index:75;display:flex;align-items:center;gap:5px;
+  background:rgba(8,10,14,.7);border:1px solid var(--line);border-radius:10px;padding:5px}
+#zoomctl .zb{padding:6px 10px}
+#zoomctl #zoomLbl{font-size:9px;letter-spacing:.12em;color:var(--dim);min-width:36px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">←</a>
+  <div class="brand"><span class="bpre">urbuild<b>.</b>space&nbsp;·&nbsp;</span>DAW MATRIX</div>
+  <div class="sp"></div>
+  <div class="tools">
+    <button class="hbtn" id="modBtn">MOD</button>
+    <button class="hbtn" id="wireBtn">WIRE</button>
+    <button class="hbtn" id="clearBtn">CLEAR WIRES</button>
+  </div>
+</header>
+
+<div id="field">
+  <canvas id="wires"></canvas>
+  <div id="world"></div>
+</div>
+
+<div id="drawer">
+  <div class="dhead" id="drawerHead"><b>BUS</b><span id="busStat">0 MSG</span>
+    <span style="flex:1"></span><span>TAP TO TOGGLE LOG</span></div>
+  <div id="log"></div>
+</div>
+<div id="modmenu"><h5>MODULES</h5><div id="modlist"></div></div>
+<div id="nodemenu"></div>
+<div id="zoomctl">
+  <button class="hbtn zb" id="zoomOut">-</button>
+  <button class="hbtn zb" id="zoomFit">FIT</button>
+  <button class="hbtn zb" id="zoomIn">+</button>
+  <span id="zoomLbl">100%</span>
+</div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="gMin" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#ffe14d"/><stop offset="1" stop-color="#1f7a3d"/></linearGradient>
+  <linearGradient id="gMax" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#7fd4ff"/><stop offset="1" stop-color="#5b2a8c"/></linearGradient>
+  <linearGradient id="gClose" x1="0" y1="1" x2="0" y2="0">
+    <stop offset="0" stop-color="#ff9a3c"/><stop offset="1" stop-color="#ff2d2d"/></linearGradient>
+</defs></svg>
+<div id="confirm" class="cmodal"><div class="cbox"><div class="cmsg"></div>
+  <div class="crow"><button class="hbtn" id="cCancel">CANCEL</button>
+  <button class="hbtn cwarn" id="cOk">CLOSE</button></div></div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ================================================================
+   ur.space — DAW NODE MATRIX HUB
+   single-file · vanilla JS · no frameworks · no build tools
+
+   ============ MODULE CONTRACT (for all ported modules) ===========
+   Identity : your module id is  window.name
+   Bus      : const bus = new BroadcastChannel('ur.bus')
+   Emit     : bus.postMessage({type:'ur:emit', from:window.name,
+                               channel:'<channel>', payload:<any JSON>})
+   Receive  : bus.onmessage → handle msgs where
+              m.data.type==='ur:data' && m.data.to===window.name
+   Routing  : the hub re-emits your 'ur:emit' as 'ur:data' along every
+              wire whose source is your node. Modules never address
+              each other directly — wires define the graph.
+   Mic      : const stream = await window.parent.URMedia.requestMic()
+              (one shared permission prompt, hub-owned)
+   Roster   : hub broadcasts {type:'ur:roster', nodes:[ids]} on changes
+   Items    : OPTIONAL. report selectable patterns so the hub can show
+              send-badges + a settings dropdown on your node:
+              bus.postMessage({type:'ur:items', from:window.name,
+                               items:[{id:'p1',label:'Pattern 1'}, ...]})
+              re-emit whenever your list changes. the hub adds the chosen
+              items[] to every 'ur:data' it routes from you.
+   ================================================================ */
+
+/* ---------- session adapter stub (same spine as the wheel) ---------- */
+const URSession = {
+  get id(){
+    let g = localStorage.getItem('ur.session.guest');
+    if(!g){ g = 'guest-' + Math.random().toString(36).slice(2,10);
+            localStorage.setItem('ur.session.guest', g); }
+    return g;
+  },
+  authed:false,
+  gate(){ return true; }
+};
+window.URSession = URSession;
+
+/* ---------- URMedia broker: one mic prompt, shared stream ---------- */
+window.URMedia = {
+  _mic:null, _pending:null,
+  requestMic(){
+    if(this._mic) return Promise.resolve(this._mic);
+    if(!this._pending){
+      this._pending = navigator.mediaDevices.getUserMedia({audio:true})
+        .then(s=>{ this._mic=s; this._pending=null; return s; });
+    }
+    return this._pending;
+  }
+};
+
+/* ---------- MODULE CATALOG ----------
+   the menu of available modules. nothing is placed by default —
+   the user adds modules into the matrix from the MOD dropdown.
+   Port a file module = drop its HTML into /daw/modules/ — node goes LIVE. */
+const CATALOG = [
+  { id:'wavseq', name:'WAVE SEQUENCER', file:'modules/wave-sequencer.html', color:'#4fd8ff', x:80,  y:80  },
+  { id:'drums',  name:'DRUM MACHINE',   file:'modules/drum-machine.html',   color:'#a86bff', x:80,  y:230 },
+  { id:'proll',  name:'PIANO ROLL',     file:'modules/piano-roll.html',     color:'#41ffb0', x:80,  y:380 },
+  { id:'warp',   name:'WARP LAB',       file:'modules/warp-lab.html',       color:'#ffae3b', x:80,  y:530 },
+  { id:'vocals', name:'VOCALS / SAMPLING', file:'modules/vocals.html',       color:'#ffb454', x:80,  y:680 },
+  { id:'arrangement', name:'ARRANGEMENT', file:'modules/arrangement.html',   color:'#a86bff', x:80,  y:830 },
+  { id:'pulse',  name:'PULSE TEST',     builtin:'pulse',                    color:'#41ffb0', x:330, y:130 },
+  { id:'busmon', name:'BUS MONITOR',    builtin:'busmon',                   color:'#4fd8ff', x:330, y:330 },
+];
+function catalogById(id){ return CATALOG.find(m=>m.id===id); }
+function placedList(){ return CATALOG.filter(m=>placed.has(m.id)); }
+
+/* ---------- built-in modules (prove the bus before any port) ---------- */
+const BUILTINS = {
+  pulse: `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ur.space — DAW</title>
-<style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#050507;color:#41ffb0;font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.3em;font-size:13px}a{color:#a86bff;text-decoration:none;margin-left:1.5em}</style>
-</head><body>DAW · NODE MATRIX HUB — DEPLOYING<a href="/">← HUB</a></body></html>
+<style>body{margin:0;background:#050507;color:#9aa3b2;font-family:ui-monospace,Menlo,monospace;
+display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:18px}
+button{background:none;border:1px solid #41ffb0;color:#41ffb0;font:inherit;letter-spacing:.2em;
+padding:14px 26px;cursor:pointer;font-size:12px}button:active{background:rgba(65,255,176,.12)}
+small{letter-spacing:.16em;color:#4a5260;font-size:9px}</style></head><body>
+<button id="b">EMIT PULSE</button><small id="s">channel: pulse</small>
+<script>
+const bus=new BroadcastChannel('ur.bus');let n=0;
+bus.postMessage({type:'ur:items',from:window.name,items:[{id:'a',label:'Pulse A'},{id:'b',label:'Pulse B'}]});
+document.getElementById('b').onclick=()=>{n++;
+bus.postMessage({type:'ur:emit',from:window.name,channel:'pulse',payload:{n,t:Date.now()}});
+document.getElementById('s').textContent='emitted #'+n;};
+</script></body></html>`,
+
+  busmon: `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>body{margin:0;background:#050507;color:#9aa3b2;font-family:ui-monospace,Menlo,monospace;
+font-size:10px;line-height:1.8;padding:12px;overflow-y:auto;height:100vh;box-sizing:border-box}
+.r{border-bottom:1px solid #161a22;padding:3px 0}.f{color:#a86bff}.c{color:#4fd8ff}
+h3{font-size:10px;letter-spacing:.22em;color:#41ffb0;margin:0 0 10px}</style></head><body>
+<h3>ADDRESSED TO ME</h3><div id="o"></div>
+<script>
+const bus=new BroadcastChannel('ur.bus');const o=document.getElementById('o');
+bus.onmessage=m=>{const d=m.data;
+if(d.type==='ur:data'&&d.to===window.name){
+const r=document.createElement('div');r.className='r';
+r.innerHTML='<span class="f">'+d.from+'</span> › <span class="c">'+d.channel+
+'</span> '+JSON.stringify(d.payload);o.prepend(r);
+while(o.children.length>40)o.lastChild.remove();}};
+</script></body></html>`
+};
+
+/* ================================================================
+   STATE + PERSISTENCE
+   ================================================================ */
+const SAVE_KEY = 'ur.daw.matrix.' + URSession.id;
+let wiresList = [];                      // [{from,to}]
+const placed = new Set();                // ids currently placed in the matrix
+let nodeItems = {};                      // id -> [{id,label}]  (live from modules, not persisted)
+let nodeSend  = {};                      // id -> [itemId,...]  (what the module is sending)
+let itemNames = {};                      // id -> {itemId: userName}  (rename overrides)
+const saved = (()=>{ try{ return JSON.parse(localStorage.getItem(SAVE_KEY))||{}; }
+                     catch(e){ return {}; } })();
+if(Array.isArray(saved.placed)) saved.placed.forEach(id=>{ if(catalogById(id)) placed.add(id); });
+if(saved.pos) CATALOG.forEach(m=>{ const p=saved.pos[m.id]; if(p){m.x=p[0];m.y=p[1];} });
+if(saved.size) CATALOG.forEach(m=>{ const s=saved.size[m.id]; if(s){ if(s[0])m.w=s[0]; if(s[1])m.h=s[1]; } });
+if(saved.send && typeof saved.send==='object') nodeSend = saved.send;
+if(saved.itemNames && typeof saved.itemNames==='object') itemNames = saved.itemNames;
+if(Array.isArray(saved.wires)) wiresList = saved.wires
+  .map(w=> (w && typeof w.from==='object') ? {from:w.from.node, to:w.to.node} : w)
+  .filter(w=> w && placed.has(w.from) && placed.has(w.to));
+
+function persist(){
+  const pos={}, size={};
+  CATALOG.forEach(m=>{ pos[m.id]=[Math.round(m.x),Math.round(m.y)];
+    if(m.w||m.h) size[m.id]=[m.w||0, m.h||0]; });
+  localStorage.setItem(SAVE_KEY, JSON.stringify({pos, size, wires:wiresList,
+    placed:[...placed], send:nodeSend, itemNames:itemNames,
+    pan:[Math.round(panX),Math.round(panY)], scale:S}));
+}
+
+/* ================================================================
+   BUS + ROUTER + LOG
+   ================================================================ */
+const bus = new BroadcastChannel('ur.bus');
+const logEl = document.getElementById('log');
+const busStat = document.getElementById('busStat');
+let msgCount = 0;
+
+function logLine(html){
+  msgCount++;
+  busStat.textContent = msgCount + ' MSG';
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  logEl.prepend(d);
+  while(logEl.children.length > 80) logEl.lastChild.remove();
+}
+
+bus.onmessage = m=>{
+  const d = m.data;
+  if(d && d.type === 'ur:items'){            // module reports its selectable items
+    nodeItems[d.from] = Array.isArray(d.items) ? d.items.slice() : [];
+    renderBadges();
+    return;
+  }
+  if(d && d.type === 'ur:open' && d.module){   // drill-in: a module asks the hub to open/focus another (e.g. Arrangement clip OPEN)
+    const m = catalogById(d.module);
+    if(m){ openModule(m); logLine('<span class="f">'+esc(d.from||'?')+'</span> › open <span class="c">'+esc(d.module)+'</span>'); }
+    else { toast('open: unknown module ' + esc(d.module)); }
+    return;
+  }
+  if(d && d.type === 'ur:emit'){
+    let routed = 0;
+    for(const w of wiresList){
+      if(w.from === d.from){
+        bus.postMessage({type:'ur:data', to:w.to, from:d.from,
+                         channel:d.channel, items:sendSet(d.from), payload:d.payload});
+        routed++;
+      }
+    }
+    logLine('<span class="f">'+esc(d.from)+'</span> › <span class="c">'+
+      esc(d.channel)+'</span> → '+routed+' wire'+(routed===1?'':'s'));
+  }
+};
+function esc(s){ return String(s).replace(/[<>&]/g, c=>({'<':'<','>':'>','&':'&'}[c])); }
+function announceRoster(){
+  bus.postMessage({type:'ur:roster', nodes:placedList().map(m=>m.id)});
+}
+
+/* ================================================================
+   MATRIX FIELD — pan, nodes, wires
+   ================================================================ */
+const field = document.getElementById('field');
+const world = document.getElementById('world');
+const wiresCv = document.getElementById('wires');
+const wctx = wiresCv.getContext('2d');
+let panX = 20, panY = 20, S = 1, DPR = 1;
+const MIN_S = 0.35, MAX_S = 2.4;
+if(saved.pan){ panX = saved.pan[0]; panY = saved.pan[1]; }
+if(saved.scale && saved.scale > 0) S = Math.max(MIN_S, Math.min(MAX_S, saved.scale));
+function clampS(s){ return Math.max(MIN_S, Math.min(MAX_S, s)); }
+function fieldRect(){ return field.getBoundingClientRect(); }
+function screenToWorld(fx, fy){ return [ (fx - panX)/S, (fy - panY)/S ]; }
+function updateZoomLbl(){ const l=document.getElementById('zoomLbl'); if(l) l.textContent=Math.round(S*100)+'%'; }
+
+const nodeEls = {};
+function buildNodeEl(m){
+  const el = document.createElement('div');
+  el.className = 'node';
+  el.style.left = m.x+'px'; el.style.top = m.y+'px';
+  if(m.w) el.style.width = m.w+'px';
+  if(m.h) el.style.height = m.h+'px';
+  el.innerHTML =
+    '<div class="nhead"><span class="dot"></span><span class="nname">'+esc(m.name)+'</span>'+
+    '<button class="ndclose" title="remove module">'+icoClose()+'</button></div>'+
+    '<div class="nbody"><button class="open">OPEN</button><span class="stat">…</span></div>'+
+    '<span class="port in"></span><span class="port out"></span><div class="nresize"></div>';
+  world.appendChild(el);
+  nodeEls[m.id] = el;
+  el.querySelector('.open').addEventListener('click', ev=>{
+    ev.stopPropagation(); openModule(m);
+  });
+  el.querySelector('.ndclose').addEventListener('click', ev=>{
+    ev.stopPropagation();
+    confirmDialog('Close '+m.name+'?  This removes the module from the matrix and clears its connections.',
+      ()=>removeNode(m));
+  });
+  /* wire-mode tap targets: whole node */
+  el.addEventListener('click', ()=>{ if(wireMode) wireTap(m.id); });
+  makeNodeDraggable(el, m);
+  makeNodeResizable(el, m);
+}
+
+/* corner drag (bottom-right) to size a node to taste — does not open it */
+function makeNodeResizable(el, m){
+  const h = el.querySelector('.nresize');
+  let rz=false, sx=0, sy=0, w0=0, h0=0;
+  h.addEventListener('pointerdown', ev=>{
+    ev.stopPropagation();
+    rz=true; sx=ev.clientX; sy=ev.clientY; w0=el.offsetWidth; h0=el.offsetHeight;
+    h.setPointerCapture(ev.pointerId);
+  });
+  h.addEventListener('pointermove', ev=>{
+    if(!rz) return;
+    m.w = Math.round(Math.max(150, Math.min(560, w0 + (ev.clientX-sx)/S)));
+    m.h = Math.round(Math.max(70,  Math.min(560, h0 + (ev.clientY-sy)/S)));
+    el.style.width = m.w+'px'; el.style.height = m.h+'px';
+    drawWires(); renderBadges();
+  });
+  h.addEventListener('pointerup', ()=>{ if(rz){ rz=false; persist(); } });
+  h.addEventListener('pointercancel', ()=>{ rz=false; });
+  h.addEventListener('click', ev=>ev.stopPropagation());
+}
+
+function nodeStatus(m, cls, txt){
+  const el = nodeEls[m.id];
+  if(!el) return;
+  el.classList.remove('live','offline');
+  if(cls) el.classList.add(cls);
+  el.querySelector('.stat').textContent = txt;
+}
+
+/* probe a placed node: LIVE if fetchable, OFFLINE if not */
+function probeNode(m){
+  if(m.builtin){ m.ok = true; nodeStatus(m,'live','BUILTIN'); return; }
+  fetch(m.file, {method:'HEAD'}).then(r=>{
+    m.ok = r.ok;
+    nodeStatus(m, r.ok?'live':'offline', r.ok?'LIVE':'NOT PORTED');
+  }).catch(()=>{ m.ok=false; nodeStatus(m,'offline','NOT PORTED'); });
+}
+
+/* add / remove a module node from the matrix (driven by the MOD menu) */
+let spawnSeq = 0;
+function addNode(m){
+  if(placed.has(m.id)){ flashNode(m.id); return; }
+  const r=fieldRect(), c=screenToWorld(r.width/2, r.height/2), off=(spawnSeq++ % 5)*22;
+  m.x=Math.round(c[0]-86+off); m.y=Math.round(c[1]-50+off);
+  placed.add(m.id);
+  buildNodeEl(m); probeNode(m);
+  applyTransform(); drawWires(); persist(); refreshMenu(); announceRoster();
+  toast('ADDED: '+m.name);
+}
+function removeNode(m){
+  if(!placed.has(m.id)) return;
+  if(typeof openWins!=='undefined' && openWins[m.id]) closeWin(m.id);
+  const el=nodeEls[m.id]; if(el) el.remove(); delete nodeEls[m.id];
+  placed.delete(m.id);
+  wiresList = wiresList.filter(w=> w.from!==m.id && w.to!==m.id);
+  if(wireSrc===m.id) wireSrc=null;
+  delete nodeItems[m.id]; delete nodeSend[m.id]; delete itemNames[m.id];
+  drawWires(); renderBadges(); persist(); refreshMenu(); announceRoster();
+  toast('REMOVED: '+m.name);
+}
+function flashNode(id){
+  const el=nodeEls[id]; if(!el) return;
+  el.classList.add('wiresrc'); setTimeout(()=>el.classList.remove('wiresrc'), 320);
+}
+
+function applyTransform(){
+  world.style.transform = 'translate('+panX+'px,'+panY+'px) scale('+S+')';
+  field.style.backgroundPosition = panX+'px '+panY+'px';
+  field.style.backgroundSize = (60*S)+'px '+(60*S)+'px';
+  updateZoomLbl();
+}
+function layoutWorld(){
+  DPR = Math.min(2, devicePixelRatio||1);
+  wiresCv.width  = field.clientWidth * DPR;
+  wiresCv.height = field.clientHeight * DPR;
+  applyTransform();
+  placedList().forEach(m=>{
+    const el = nodeEls[m.id];
+    if(el){ el.style.left = m.x+'px'; el.style.top = m.y+'px'; }
+  });
+  drawWires();
+  renderBadges();
+}
+
+function portPos(id, out){
+  const m = catalogById(id);
+  const el = nodeEls[id];
+  if(!m || !el) return [panX, panY];
+  return [ panX + (m.x + (out ? el.offsetWidth : 0))*S,
+           panY + (m.y + el.offsetHeight/2)*S ];
+}
+
+function drawWires(){
+  wctx.setTransform(DPR,0,0,DPR,0,0);
+  wctx.clearRect(0,0,wiresCv.width,wiresCv.height);
+  wctx.lineWidth = 1.5; wctx.lineCap='round';
+  for(const w of wiresList){
+    if(!placed.has(w.from) || !placed.has(w.to)) continue;
+    const [x1,y1] = portPos(w.from,true);
+    const [x2,y2] = portPos(w.to,false);
+    const dx = Math.max(40, Math.abs(x2-x1)*0.5);
+    const grad = wctx.createLinearGradient(x1,y1,x2,y2);
+    grad.addColorStop(0,'#4fd8ff'); grad.addColorStop(1,'#a86bff');
+    wctx.strokeStyle = grad;
+    wctx.shadowColor = '#4fd8ff'; wctx.shadowBlur = 6;
+    wctx.globalAlpha = 0.9;
+    wctx.beginPath();
+    wctx.moveTo(x1,y1);
+    wctx.bezierCurveTo(x1+dx,y1, x2-dx,y2, x2,y2);
+    wctx.stroke();
+  }
+  wctx.globalAlpha=1; wctx.shadowBlur=0;
+  /* wire-source highlight */
+  if(wireMode && wireSrc && placed.has(wireSrc)){
+    const [x,y] = portPos(wireSrc,true);
+    wctx.fillStyle='#4fd8ff'; wctx.shadowColor='#4fd8ff'; wctx.shadowBlur=12;
+    wctx.beginPath(); wctx.arc(x,y,5,0,Math.PI*2); wctx.fill();
+    wctx.shadowBlur=0;
+  }
+}
+
+/* ================================================================
+   CONNECTION ITEMS + BADGES
+   modules report items via {type:'ur:items', from, items:[{id,label}]}.
+   badges sit at the source out-port and show WHAT is being sent;
+   the node settings dropdown chooses HOW (which items + their names).
+   ================================================================ */
+let badgeLayer = null, btip = null, lastTapKey = null, lastTapAt = 0, tapTimer = null;
+
+function itemsOf(id){ return nodeItems[id] || []; }
+function hasItems(id){ return itemsOf(id).length > 0; }
+function itemExists(id, itemId){ return itemsOf(id).some(it=>it.id===itemId); }
+function itemLabel(id, itemId){
+  const ov = itemNames[id] && itemNames[id][itemId];
+  if(ov) return ov;
+  const it = itemsOf(id).find(x=>x.id===itemId);
+  return (it && it.label) || itemId;
+}
+function sendSet(id){ return (nodeSend[id]||[]).filter(it=>itemExists(id,it)); }
+function outgoing(id){ return wiresList.some(w=>w.from===id); }
+function shortLabel(s){ s=String(s); return s.length>7 ? s.slice(0,7) : s; }
+
+function ensureBadgeLayer(){
+  if(!badgeLayer){ badgeLayer=document.createElement('div'); badgeLayer.id='badgeLayer'; world.appendChild(badgeLayer); }
+  if(!btip){ btip=document.createElement('div'); btip.id='btip'; document.body.appendChild(btip); }
+}
+function renderBadges(){
+  ensureBadgeLayer();
+  badgeLayer.innerHTML='';
+  placedList().forEach(m=>{
+    if(!outgoing(m.id) || !hasItems(m.id)) return;
+    const el=nodeEls[m.id]; if(!el) return;
+    const ox=m.x + el.offsetWidth, oy=m.y + el.offsetHeight/2;
+    const sel=sendSet(m.id);
+    let badges;
+    if(sel.length===0) badges=[{kind:'gear'}];
+    else if(sel.length>3) badges=[{kind:'stack', n:sel.length}];
+    else badges=sel.map(it=>({kind:'item', item:it}));
+    badges.forEach((b,i)=>{
+      const d=document.createElement('div'); d.className='badge';
+      d.style.left=(ox+8+i*22)+'px'; d.style.top=(oy-8)+'px';
+      let readout;
+      if(b.kind==='gear'){ d.classList.add('gear'); d.textContent='+'; readout='pick what to send'; }
+      else if(b.kind==='stack'){ d.classList.add('stack'); d.textContent=b.n+'x';
+        readout=sel.map(it=>itemLabel(m.id,it)).join(', '); }
+      else { d.style.background=m.color||'#4fd8ff'; d.textContent=shortLabel(itemLabel(m.id,b.item));
+        readout=itemLabel(m.id,b.item); }
+      d.addEventListener('mouseenter', ()=>showTip(d, readout));
+      d.addEventListener('mouseleave', hideTip);
+      d.addEventListener('click', ev=>{ ev.stopPropagation(); badgeTap(m.id, readout); });
+      d.addEventListener('dblclick', ev=>{ ev.stopPropagation(); clearTimeout(tapTimer); hideTip(); openNodeSettings(m.id); });
+      badgeLayer.appendChild(d);
+    });
+  });
+}
+function badgeTap(id, readout){
+  const now=Date.now();
+  if(id===lastTapKey && now-lastTapAt<300){      // double tap -> open settings
+    clearTimeout(tapTimer); lastTapKey=null; lastTapAt=0; hideTip(); openNodeSettings(id);
+  } else {                                        // single tap -> quick readout
+    lastTapKey=id; lastTapAt=now; clearTimeout(tapTimer);
+    tapTimer=setTimeout(()=>{ toast(readout); }, 300);
+  }
+}
+function showTip(anchor, text){
+  ensureBadgeLayer(); btip.textContent=text;
+  const r=anchor.getBoundingClientRect();
+  btip.style.left=(r.left+r.width/2)+'px'; btip.style.top=(r.top-6)+'px';
+  btip.classList.add('show');
+}
+function hideTip(){ if(btip) btip.classList.remove('show'); }
+
+function openNodeSettings(id){
+  const m=catalogById(id); if(!m) return;
+  const menu=document.getElementById('nodemenu');
+  let html='<h5>'+esc(m.name)+' · SENDING</h5>';
+  const items=itemsOf(id);
+  if(!items.length){ html+='<div class="nmempty">No patterns reported yet</div>'; }
+  else items.forEach(it=>{
+    const on=(nodeSend[id]||[]).indexOf(it.id)>=0;
+    html+='<div class="nmrow">'+
+      '<button class="nmtog'+(on?' on':'')+'" data-item="'+esc(it.id)+'">'+(on?'ON':'OFF')+'</button>'+
+      '<input class="nmname" data-item="'+esc(it.id)+'" value="'+esc(itemLabel(id,it.id))+'"></div>';
+  });
+  menu.innerHTML=html; menu.dataset.node=id; menu.classList.add('open');
+  const el=nodeEls[id], r=fieldRect();
+  const sx=r.left + panX + (m.x + (el?el.offsetWidth:0))*S + 12*S;
+  const sy=r.top  + panY + m.y*S;
+  menu.style.left=Math.max(8, Math.min(sx, innerWidth-menu.offsetWidth-8))+'px';
+  menu.style.top =Math.max(50, Math.min(sy, innerHeight-180))+'px';
+  menu.querySelectorAll('.nmtog').forEach(b=>b.addEventListener('click', e=>{
+    e.stopPropagation();
+    const it=b.getAttribute('data-item'), arr=nodeSend[id]||(nodeSend[id]=[]), k=arr.indexOf(it);
+    if(k>=0) arr.splice(k,1); else arr.push(it);
+    const onNow=arr.indexOf(it)>=0; b.classList.toggle('on', onNow); b.textContent=onNow?'ON':'OFF';
+    persist(); renderBadges();
+  }));
+  menu.querySelectorAll('.nmname').forEach(inp=>{
+    inp.addEventListener('click', e=>e.stopPropagation());
+    inp.addEventListener('change', ()=>{
+      const it=inp.getAttribute('data-item');
+      itemNames[id]=itemNames[id]||{}; itemNames[id][it]=inp.value.trim()||it;
+      persist(); renderBadges();
+    });
+  });
+}
+function closeNodeSettings(){ const menu=document.getElementById('nodemenu'); if(menu) menu.classList.remove('open'); }
+document.addEventListener('pointerdown', e=>{
+  const nm=document.getElementById('nodemenu');
+  if(nm && nm.classList.contains('open') && !nm.contains(e.target) && !e.target.classList.contains('badge'))
+    closeNodeSettings();
+});
+/* ---------- pan + pinch-zoom (multi-touch, anchored, no-jump) ---------- */
+const ptrs = new Map();
+let panning=false, panArmed=false, panSX=0, panSY=0, panOX=0, panOY=0;
+let pinch=null;
+function isField(t){ return t===field || t===wiresCv || t===world; }
+function twoPts(){ const a=[]; ptrs.forEach(v=>a.push(v)); return a; }
+
+field.addEventListener('pointerdown', ev=>{
+  if(!isField(ev.target)) return;
+  const r=fieldRect();
+  ptrs.set(ev.pointerId, {x:ev.clientX-r.left, y:ev.clientY-r.top});
+  field.setPointerCapture(ev.pointerId);
+  if(ptrs.size===1){
+    panArmed=true; panning=false; panSX=ev.clientX; panSY=ev.clientY; panOX=panX; panOY=panY;
+  } else if(ptrs.size===2){
+    panArmed=false; panning=false; field.classList.remove('panning');
+    startPinch();
+  }
+});
+field.addEventListener('pointermove', ev=>{
+  if(!ptrs.has(ev.pointerId)) return;
+  const r=fieldRect();
+  ptrs.set(ev.pointerId, {x:ev.clientX-r.left, y:ev.clientY-r.top});
+  if(ptrs.size>=2){ doPinch(); return; }
+  if(!panArmed) return;
+  const dx=ev.clientX-panSX, dy=ev.clientY-panSY;
+  if(!panning){
+    if(Math.abs(dx)+Math.abs(dy) < 4) return;   // dead-zone: ignore micro-jitter
+    panning=true; field.classList.add('panning');
+  }
+  panX = panOX + dx; panY = panOY + dy;
+  applyTransform(); drawWires();
+});
+function startPinch(){
+  const a=twoPts(); if(a.length<2){ pinch=null; return; }
+  const mx=(a[0].x+a[1].x)/2, my=(a[0].y+a[1].y)/2;
+  const d=Math.hypot(a[0].x-a[1].x, a[0].y-a[1].y)||1;
+  const w=screenToWorld(mx,my);
+  pinch={s0:S, d0:d, wx:w[0], wy:w[1]};
+}
+function doPinch(){
+  if(!pinch){ startPinch(); return; }
+  const a=twoPts(); if(a.length<2) return;
+  const mx=(a[0].x+a[1].x)/2, my=(a[0].y+a[1].y)/2;
+  const d=Math.hypot(a[0].x-a[1].x, a[0].y-a[1].y)||1;
+  S=clampS(pinch.s0 * (d/pinch.d0));
+  panX = mx - pinch.wx*S; panY = my - pinch.wy*S;   // anchor world point under the pinch midpoint
+  applyTransform(); drawWires();
+}
+function endPtr(ev){
+  if(ptrs.has(ev.pointerId)) ptrs.delete(ev.pointerId);
+  if(ptrs.size===1){
+    /* dropped from pinch to one finger: rebase pan, no jump */
+    pinch=null;
+    const only=twoPts()[0], r=fieldRect();
+    panArmed=true; panning=false;
+    panSX=only.x+r.left; panSY=only.y+r.top; panOX=panX; panOY=panY;
+  } else if(ptrs.size===0){
+    if(panning){ saved.pan=[panX,panY]; }
+    panArmed=false; panning=false; pinch=null; field.classList.remove('panning');
+    saved.scale=S; persist();
+  }
+}
+field.addEventListener('pointerup', endPtr);
+field.addEventListener('pointercancel', endPtr);
+
+/* ---------- zoom buttons + fit ---------- */
+function zoomAround(fx, fy, factor){
+  const w=screenToWorld(fx,fy);
+  S=clampS(S*factor);
+  panX=fx-w[0]*S; panY=fy-w[1]*S;
+  applyTransform(); drawWires(); saved.scale=S; persist();
+}
+function zoomBtn(factor){ const r=fieldRect(); zoomAround(r.width/2, r.height/2, factor); }
+function fitView(){
+  const list = placedList();
+  if(!list.length){ toast('MATRIX EMPTY — ADD A MODULE'); return; }
+  let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+  list.forEach(m=>{ const el=nodeEls[m.id]; if(!el) return;
+    minx=Math.min(minx,m.x); miny=Math.min(miny,m.y);
+    maxx=Math.max(maxx,m.x+el.offsetWidth); maxy=Math.max(maxy,m.y+el.offsetHeight); });
+  const r=fieldRect(), pad=40, bw=(maxx-minx)+pad*2, bh=(maxy-miny)+pad*2;
+  S=clampS(Math.min(r.width/bw, r.height/bh));
+  panX=(r.width-(maxx-minx)*S)/2 - minx*S;
+  panY=(r.height-(maxy-miny)*S)/2 - miny*S;
+  applyTransform(); drawWires(); saved.scale=S; saved.pan=[panX,panY]; persist();
+}
+document.getElementById('zoomIn').addEventListener('click', ()=>zoomBtn(1.2));
+document.getElementById('zoomOut').addEventListener('click', ()=>zoomBtn(1/1.2));
+document.getElementById('zoomFit').addEventListener('click', fitView);
+
+/* ---------- node dragging ---------- */
+function makeNodeDraggable(el, m){
+  let drag=false, sx=0, sy=0, ox=0, oy=0, moved=false;
+  el.addEventListener('pointerdown', ev=>{
+    if(ev.target.closest('.open,.ndclose,.nresize')) return;
+    drag=true; moved=false; sx=ev.clientX; sy=ev.clientY; ox=m.x; oy=m.y;
+    el.setPointerCapture(ev.pointerId);
+    ev.stopPropagation();
+  });
+  el.addEventListener('pointermove', ev=>{
+    if(!drag) return;
+    const dx=ev.clientX-sx, dy=ev.clientY-sy;
+    if(!moved){ if(Math.abs(dx)+Math.abs(dy) < 5) return; moved=true; }
+    m.x = ox+dx/S; m.y = oy+dy/S;
+    el.style.left = m.x+'px'; el.style.top = m.y+'px';
+    drawWires(); renderBadges();
+  });
+  el.addEventListener('pointerup', ev=>{
+    if(drag){ drag=false; if(moved){ persist(); }
+      /* suppress the click that follows a drag */
+      if(moved){ const stop=e=>{e.stopPropagation();};
+        el.addEventListener('click', stop, {capture:true, once:true}); } }
+  });
+  el.addEventListener('pointercancel', ()=>{ drag=false; });
+
+/* ---------- wire mode ---------- */
+let wireMode=false, wireSrc=null;
+const wireBtn = document.getElementById('wireBtn');
+wireBtn.addEventListener('click', ()=>{
+  wireMode = !wireMode; wireSrc=null;
+  wireBtn.classList.toggle('active', wireMode);
+  Object.values(nodeEls).forEach(e=>e.classList.remove('wiresrc'));
+  toast(wireMode ? 'WIRE MODE — TAP SOURCE NODE, THEN TARGET' : 'WIRE MODE OFF');
+  drawWires();
+});
+function wireTap(id){
+  if(!wireSrc){
+    wireSrc = id;
+    nodeEls[id].classList.add('wiresrc');
+    toast('SOURCE: '+id.toUpperCase()+' — NOW TAP TARGET');
+  } else if(wireSrc === id){
+    wireSrc = null; nodeEls[id].classList.remove('wiresrc');
+    toast('WIRE CANCELLED');
+  } else {
+    const exists = wiresList.findIndex(w=>w.from===wireSrc && w.to===id);
+    if(exists >= 0){
+      wiresList.splice(exists,1);
+      toast('WIRE REMOVED: '+wireSrc.toUpperCase()+' → '+id.toUpperCase());
+    } else {
+      wiresList.push({from:wireSrc, to:id});
+      toast('WIRED: '+wireSrc.toUpperCase()+' → '+id.toUpperCase());
+    }
+    nodeEls[wireSrc].classList.remove('wiresrc');
+    wireSrc = null;
+    persist(); announceRoster();
+  }
+  drawWires(); renderBadges();
+}
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  if(!wiresList.length){ toast('NO WIRES'); return; }
+  wiresList = []; persist(); drawWires(); renderBadges(); toast('ALL WIRES CLEARED');
+});
+
+/* ================================================================
+   MODULE CONTAINERS (windows + iframes)
+   ================================================================ */
+const openWins = {};
+let winOffset = 0;
+
+/* custom window-control icons (outline-only, spectral gradient strokes) */
+function icoMin(){
+  return '<svg class="wico" viewBox="0 0 24 24" fill="none" stroke="url(#gMin)" '+
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+
+    '<rect x="3" y="7" width="18" height="10"/><rect x="8" y="10.5" width="8" height="3"/>'+
+    '<path d="M3 7 L8 10.5 M21 7 L16 10.5 M3 17 L8 13.5 M21 17 L16 13.5"/></svg>';
+}
+function icoMax(){
+  return '<svg class="wico" viewBox="0 0 24 24" fill="none" stroke="url(#gMax)" '+
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+
+    '<rect x="3" y="3" width="18" height="18"/><circle cx="12" cy="12" r="6.5"/>'+
+    '<rect x="8.5" y="8.5" width="7" height="7"/></svg>';
+}
+function icoClose(){
+  return '<svg class="wico" viewBox="0 0 24 24" fill="none" stroke="url(#gClose)" '+
+    'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">'+
+    '<path d="M6 6 L18 18"/><path d="M6 18 C 11 13, 14 9, 18 5"/></svg>';
+}
+
+function openModule(m){
+  if(!m.ok){ toast(m.name+' — NOT PORTED YET'); return; }
+  if(openWins[m.id]){ const w0=openWins[m.id]; w0.style.display=''; focusWin(w0); return; }
+
+  const win = document.createElement('div');
+  win.className = 'win';
+  const w = Math.min(560, innerWidth-40), h = Math.min(440, innerHeight-120);
+  win.style.width = w+'px'; win.style.height = h+'px';
+  win.style.left = (30 + (winOffset%5)*26)+'px';
+  win.style.top  = (66 + (winOffset%5)*26)+'px';
+  winOffset++;
+  win.innerHTML =
+    '<div class="whead"><span class="wtitle">'+esc(m.name)+'</span>'+
+    '<button class="wbtn wmin" title="minimize">'+icoMin()+'</button>'+
+    '<button class="wbtn wmax" title="fullscreen">'+icoMax()+'</button>'+
+    '<button class="wbtn wclose" title="close">'+icoClose()+'</button></div>';
+  const iframe = document.createElement('iframe');
+  iframe.name = m.id;                                /* identity contract */
+  iframe.allow = 'microphone; autoplay';             /* same-origin srcdoc: lets Vocals record + play */
+  win.appendChild(iframe);
+  document.body.appendChild(win);
+  openWins[m.id] = win;
+  focusWin(win);
+
+  if(m.builtin){
+    iframe.srcdoc = BUILTINS[m.builtin];
+  } else {
+    fetch(m.file).then(r=>r.text()).then(html=>{ iframe.srcdoc = html; })
+      .catch(()=>{
+        iframe.srcdoc = '<!DOCTYPE html><meta name="viewport" content="width=device-width,initial-scale=1">'+
+          '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;'+
+          'text-align:center;padding:18px;background:#06090d;color:#5b7480;'+
+          'font:11px/1.6 ui-monospace,monospace;letter-spacing:.06em">'+esc(m.name)+
+          ' could not load.<br>loads once ported to /daw/modules/<br><br>'+
+          'use the controls above to minimize or close.</body>';
+        toast(m.name+' — LOAD FAILED (window kept open)');
+      });
+  }
+
+  win.querySelector('.wmin').addEventListener('click', e=>{ e.stopPropagation();
+    win.style.display='none'; toast(m.name+' — MINIMIZED (open again from its node)'); });
+  win.querySelector('.wmax').addEventListener('click', e=>{ e.stopPropagation();
+    win.classList.toggle('full'); focusWin(win); });
+  win.querySelector('.wclose').addEventListener('click', e=>{ e.stopPropagation();
+    confirmDialog('Close '+m.name+'?  This removes the module from the matrix and clears its connections.',
+      ()=>removeNode(m)); });
+  win.addEventListener('pointerdown', ()=>focusWin(win));
+
+  /* window drag (desktop; mobile is fullscreen via CSS) */
+  const head = win.querySelector('.whead');
+  let drag=false, sx=0, sy=0, ox=0, oy=0;
+  head.addEventListener('pointerdown', ev=>{
+    if(ev.target.closest('.wbtn')) return;
+    if(innerWidth <= 700) return;
+    drag=true; sx=ev.clientX; sy=ev.clientY;
+    ox=parseFloat(win.style.left); oy=parseFloat(win.style.top);
+    head.setPointerCapture(ev.pointerId);
+  });
+  head.addEventListener('pointermove', ev=>{
+    if(!drag) return;
+    win.style.left = Math.max(0, ox + ev.clientX - sx)+'px';
+    win.style.top  = Math.max(46, oy + ev.clientY - sy)+'px';
+  });
+  head.addEventListener('pointerup', ()=>{ drag=false; });
+
+  announceRoster();
+}
+function focusWin(win){
+  document.querySelectorAll('.win').forEach(w=>w.classList.remove('top'));
+  win.classList.add('top');
+}
+function closeWin(id){
+  const w = openWins[id];
+  if(w){ w.remove(); delete openWins[id]; announceRoster(); }
+}
+
+/* reusable confirm pop-up (used by the module close button) */
+function confirmDialog(msg, onOk){
+  const ov = document.getElementById('confirm');
+  ov.querySelector('.cmsg').textContent = msg;
+  ov.classList.add('open');
+  const ok = document.getElementById('cOk'), cancel = document.getElementById('cCancel');
+  function cleanup(){ ov.classList.remove('open');
+    ok.removeEventListener('click', okFn); cancel.removeEventListener('click', caFn);
+    ov.removeEventListener('click', bgFn); }
+  function okFn(){ cleanup(); onOk(); }
+  function caFn(){ cleanup(); }
+  function bgFn(e){ if(e.target===ov) cleanup(); }
+  ok.addEventListener('click', okFn); cancel.addEventListener('click', caFn);
+  ov.addEventListener('click', bgFn);
+}
+
+/* ================================================================
+   CHROME
+   ================================================================ */
+const toastEl = document.getElementById('toast');
+let toastT = null;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>toastEl.classList.remove('show'), 2400);
+}
+document.getElementById('drawerHead').addEventListener('click', ()=>{
+  document.getElementById('drawer').classList.toggle('open');
+});
+document.addEventListener('touchmove', ev=>{
+  if(!ev.target.closest('#log')) ev.preventDefault();
+}, {passive:false});
+
+/* ================================================================
+   MOD DROPDOWN — add / remove modules from the matrix
+   ================================================================ */
+const modBtn  = document.getElementById('modBtn');
+const modmenu = document.getElementById('modmenu');
+const modlist = document.getElementById('modlist');
+function buildMenu(){
+  modlist.innerHTML = '';
+  CATALOG.forEach(m=>{
+    const it = document.createElement('div'); it.className = 'mitem';
+    it.innerHTML = '<span class="sw" style="background:'+(m.color||'#4a5260')+'"></span>'+
+      '<span class="mn">'+esc(m.name)+'</span><span class="mtag">ADD</span>';
+    it.addEventListener('click', ()=>{ placed.has(m.id) ? removeNode(m) : addNode(m); });
+    modlist.appendChild(it); m._mi = it;
+  });
+  refreshMenu();
+}
+function refreshMenu(){
+  CATALOG.forEach(m=>{ const it = m._mi; if(!it) return;
+    const on = placed.has(m.id);
+    it.classList.toggle('on', on);
+    it.querySelector('.mtag').textContent = on ? 'REMOVE' : 'ADD';
+  });
+}
+function toggleMenu(open){
+  const willOpen = (open===undefined) ? !modmenu.classList.contains('open') : open;
+  modmenu.classList.toggle('open', willOpen);
+  modBtn.classList.toggle('active', willOpen);
+  if(willOpen){
+    const r = modBtn.getBoundingClientRect();
+    let left = Math.min(r.left, innerWidth - modmenu.offsetWidth - 8);
+    modmenu.style.left = Math.max(8, left)+'px';
+    modmenu.style.top  = (r.bottom + 6)+'px';
+  }
+}
+modBtn.addEventListener('click', e=>{ e.stopPropagation(); toggleMenu(); });
+document.addEventListener('pointerdown', e=>{
+  if(modmenu.classList.contains('open') && !modmenu.contains(e.target) && e.target!==modBtn)
+    toggleMenu(false);
+});
+
+addEventListener('resize', layoutWorld);
+placedList().forEach(m=>{ buildNodeEl(m); probeNode(m); });
+buildMenu();
+layoutWorld();
+announceRoster();
+toa st('MATRIX READY — TAP MOD TO ADD MODULES');
+</script>
+</body>
+</html>
