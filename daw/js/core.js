@@ -175,13 +175,16 @@ bus.onmessage = m=>{
       esc(d.channel)+'</span> → '+routed+' wire'+(routed===1?'':'s'));
   }
 };
-function esc(s){ return String(s).replace(/[<>&]/g, c=>({'<':'<','>':'>','&':'&'}[c])); }
+
+function esc(s){ var amp=String.fromCharCode(38);
+  return String(s).replace(/&/g, amp+'amp;').replace(/</g, amp+'lt;').replace(/>/g, amp+'gt;'); }
+
 function announceRoster(){
   bus.postMessage({type:'ur:roster', nodes:placedList().map(m=>m.id)});
 }
 
 /* ================================================================ 
-   CHROME (toast + drawer)
+   CHROME (toast + drawer + confirm)
    ================================================================ */
 const toastEl = document.getElementById('toast');
 let toastT = null;
@@ -191,6 +194,22 @@ function toast(msg){
   clearTimeout(toastT);
   toastT = setTimeout(()=>toastEl.classList.remove('show'), 2400);
 }
+
+function confirmDialog(msg, onOk){
+  const ov = document.getElementById('confirm');
+  ov.querySelector('.cmsg').textContent = msg;
+  ov.classList.add('open');
+  const ok = document.getElementById('cOk'), cancel = document.getElementById('cCancel');
+  function cleanup(){ ov.classList.remove('open');
+    ok.removeEventListener('click', okFn); cancel.removeEventListener('click', caFn);
+    ov.removeEventListener('click', bgFn); }
+  function okFn(){ cleanup(); onOk(); }
+  function caFn(){ cleanup(); }
+  function bgFn(e){ if(e.target===ov) cleanup(); }
+  ok.addEventListener('click', okFn); cancel.addEventListener('click', caFn);
+  ov.addEventListener('click', bgFn);
+}
+
 document.getElementById('drawerHead').addEventListener('click', ()=>{
   document.getElementById('drawer').classList.toggle('open');
 });
