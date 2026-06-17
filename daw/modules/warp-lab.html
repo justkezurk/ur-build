@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>WARP LAB — synth/warp engine</title>
+<!--
+  WARP LAB  ·  SFTS2026 / URBUILD   ·   V2 (filter + ADSR + voice/gate)
+  ────────────────────────────────────────────────────────────────────────
+  Sound/warp engine only (visuals + file upload live in the Reactive Visuals module).
+
+  Signal chain:  osc + audioIn  ->  biquad filter  ->  VCA (amp ADSR)  ->  out
+    • Wavetable: 80 hex cells -> Fourier PeriodicWave (unchanged from V1).
+    • Voice: monophonic, glide (portamento). Gate -> amp ADSR + filter envelope.
+    • Warp: a beat-synced LFO summed into filter.frequency (depth + rate).
+
+  Public API (window.WarpEngine):
+    .play()/.stop()   sustained gate on/off (drone)
+    .noteOn()/.noteOff()  explicit gate
+    .loadHex(str)/.getHex()/.randomize()
+    .getInput()/.getOutput()/.connectFrom(n)/.connectTo(n)
+    .mount(el) .sleep() .wake()
+-->
+<style>
+  #wl-pane, #wl-pane * { box-sizing: border-box; }
+  #wl-pane { font-family: ui-monospace, Menlo, Consolas, monospace; color: #cfe9ee; }
+  #wl-pane .wl-card { background: linear-gradient(180deg, rgba(18,24,28,.92), rgba(9,12,15,.92));
+    border: 1px solid #1c2226; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+  #wl-pane .wl-sec { background: rgba(12,16,20,.6); border: 1px solid #182026; border-radius: 12px; padding: 14px; }
+  #wl-pane .wl-h { font: 800 12px/1 ui-monospace, monospace; letter-spacing: .16em; text-transform: uppercase; color: #00f2ff; }
+  #wl-pane .wl-sech { font: 800 9px/1 ui-monospace, monospace; letter-spacing: .18em; text-transform: uppercase; color: #5b6b70; margin-bottom: 12px; }
+  #wl-pane .wl-label { font: 700 9px/1.2 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: #6c7e84; }
+  #wl-pane .wl-val { font: 700 10px/1 ui-monospace, monospace; color: #e6f7fa; }
+  #wl-pane .wl-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #2a3138; }
+  #wl-pane .wl-dot.live { background: #39ff14; box-shadow: 0 0 8px #39ff14; }
+  #wl-pane .wl-btn { font: 800 11px/1 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase;
+    padding: 11px 18px; border-radius: 10px; cursor: pointer; background: transparent; border: 1px solid #2a3138; color: #9fb0b4; }
+  #wl-pane .wl-btn, #wl-pane .wl-sel, #wl-pane .wl-h, #wl-pane .wl-sech, #wl-pane .wl-label, #wl-pane .wl-foldhdr {
+    user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; -webkit-touch-callout: none; }
+  #wl-pane .wl-fold.collapsed .wl-foldbody { display: none; }
+  #wl-pane .wl-foldhdr { width: 100%; text-align: left; cursor: pointer; background: transparent; border: 0;
+    border-bottom: 1px solid #1c2226; padding: 10px 2px; margin-bottom: 12px; color: #00f2ff;
+    font: 800 11px/1 ui-monospace, monospace; letter-spacing: .16em; text-transform: uppercase; }
+  #wl-pane .wl-foldhdr::before { content: "\25BE  "; color: #5b6b70; }
+  #wl-pane .wl-fold.collapsed .wl-foldhdr::before { content: "\25B8  "; }
+  #wl-pane .wl-btn:hover { color: #fff; border-color: #3f4a50; }
+  #wl-pane .wl-btn.power.on { background: #39ff1422; color: #39ff14; border-color: #39ff1466; }
+  #wl-pane .wl-btn.trig:active, #wl-pane .wl-btn.trig.on { background: #00f2ff22; color: #00f2ff; border-color: #00f2ff66; }
+  #wl-pane .wl-sel { background: #0a0d10; border: 1px solid #2a3138; border-radius: 8px; color: #9fc7cd;
+    font: 700 10px/1 ui-monospace, monospace; padding: 8px 10px; }
+  /* knobs */
+  #wl-pane .wl-knobrow { display: flex; flex-wrap: wrap; gap: 16px 18px; align-items: flex-end; }
+  #wl-pane .wl-knob { width: 52px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    touch-action: pan-y; cursor: ns-resize; outline: none; user-select: none; -webkit-user-select: none; }
+  #wl-pane .wl-knob-dial { position: relative; width: 40px; height: 40px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 35%, #1b2a30, #0a0d10); border: 1px solid #2a3138; box-shadow: inset 0 2px 6px rgba(0,0,0,.6); }
+  #wl-pane .wl-knob.drag .wl-knob-dial, #wl-pane .wl-knob:focus .wl-knob-dial { border-color: #00f2ff; box-shadow: inset 0 2px 6px rgba(0,0,0,.6), 0 0 10px #00f2ff55; }
+  #wl-pane .wl-knob-ind { position: absolute; left: 50%; top: 50%; width: 2px; height: 15px; background: #00f2ff;
+    transform-origin: 50% 100%; transform: translate(-50%,-100%) rotate(0deg); border-radius: 2px; box-shadow: 0 0 6px #00f2ff; }
+  #wl-pane .wl-knob-lab { font: 700 8px/1.1 ui-monospace, monospace; letter-spacing: .03em; text-transform: uppercase; color: #5b6b70; text-align: center; }
+  #wl-pane .wl-knob-val { font: 700 9px/1 ui-monospace, monospace; color: #e6f7fa; }
+  #wl-pane .wl-scope { display: block; width: 100%; height: 90px; background: #06090c; border: 1px solid #16202a; border-radius: 10px; }
+  #wl-pane .wl-wave { display: block; width: 100%; height: 150px; background: #06090c; border: 1px solid #16202a; border-radius: 10px; cursor: crosshair; touch-action: none; }
+  /* hex matrix */
+  #wl-pane .wl-matrix { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; }
+  #wl-pane .wl-cell { width: 100%; aspect-ratio: 1 / 1; min-height: 26px; text-align: center; text-transform: uppercase;
+    font: 800 12px/1 ui-monospace, monospace; color: #7fdfe9; background: radial-gradient(120% 120% at 50% 0%, #13242a, #0a0d10);
+    border: 1px solid #21303a; border-radius: 6px; padding: 0; caret-color: #00f2ff; }
+  #wl-pane .wl-cell:focus { outline: none; border-color: #00f2ff; box-shadow: 0 0 8px #00f2ff66; color: #dffbff; }
+  #wl-pane .wl-hexrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #wl-pane .wl-hexin { flex: 1; min-width: 160px; background: #0a0d10; border: 1px solid #2a3138; border-radius: 8px;
+    color: #7fdfe9; padding: 9px 10px; font: 700 11px/1 ui-monospace, monospace; letter-spacing: .04em; }
+  #wl-pane .wl-hexout { font: 700 9px/1.4 ui-monospace, monospace; color: #5b6b70; word-break: break-all; cursor: pointer; }
+  #wl-pane .wl-capwrap { position: relative; display: inline-block; margin-bottom: 14px; }
+  #wl-pane .wl-cap { position: absolute; z-index: 40; left: 0; top: calc(100% + 6px); width: 280px; max-height: 340px; overflow: auto;
+    background: #0b0f14; border: 1px solid rgba(0,242,255,.35); border-radius: 14px; padding: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.6); display: none; }
+  #wl-pane .wl-cap.open { display: block; }
+  #wl-pane .wl-caph { font: 800 9px/1 ui-monospace, monospace; letter-spacing: .18em; color: #5b6b70; margin: 2px 0 8px; }
+  #wl-pane .wl-caprow { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  #wl-pane .wl-mini { font: 700 10px/1 ui-monospace, monospace; padding: 6px 8px; border-radius: 8px; cursor: pointer; background: rgba(0,242,255,.08); border: 1px solid rgba(0,242,255,.3); color: #bdeef4; }
+  #wl-pane .wl-mini:hover { background: rgba(0,242,255,.16); }
+  #wl-pane .wl-mini.ghost { background: transparent; border-color: #2a3a44; color: #8aa0a6; }
+  #wl-pane .wl-mini.wide { flex: 1; text-align: center; }
+  #wl-pane .wl-mini[disabled] { opacity: .4; cursor: default; }
+  #wl-pane .wl-slot { display: flex; align-items: center; gap: 4px; padding: 5px 0; border-top: 1px solid #141a1f; }
+  #wl-pane .wl-slot .nm { flex: 1; font: 600 11px/1.2 ui-monospace, monospace; color: #cfe9ec; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #wl-pane .wl-slot .nm:hover { color: #fff; text-decoration: underline; }
+  #wl-pane .wl-ic { font: 700 11px/1 ui-monospace, monospace; padding: 4px 6px; border-radius: 6px; cursor: pointer; background: transparent; border: 1px solid #2a3a44; color: #8aa0a6; }
+  #wl-pane .wl-ic:hover { color: #fff; border-color: #00f2ff; }
+  #wl-pane .wl-empty { font: 600 10px/1.4 ui-monospace, monospace; color: #566; padding: 6px 0; }
+  /* node-in placeholder */
+  #wl-pane .wl-nodein { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px dashed #2a3a44; border-radius: 12px; background: rgba(0,242,255,.03); }
+  #wl-pane .wl-portrow { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #141a1f; }
+  #wl-pane .wl-port.future { border-color: #3a4a52; box-shadow: none; opacity: .5; }
+  #wl-pane .wl-porttag { font: 800 8px/1 ui-monospace, monospace; letter-spacing: .1em; color: #9fc7cd; min-width: 78px; }
+  #wl-pane .wl-port { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #00f2ff; box-shadow: 0 0 10px #00f2ff66; flex: none; background: rgba(0,0,0,.4); }
+  #wl-pane .wl-port.out { border-color: #ff00ff; box-shadow: 0 0 10px #ff00ff66; }
+  #wl-pane .wl-meter { height: 8px; border-radius: 5px; background: #10151a; overflow: hidden; }
+  #wl-pane .wl-meterfill { height: 100%; width: 0%; background: linear-gradient(90deg, #00f2ff, #ff00ff); }
+  /* knob drag guide overlay (appended to body) */
+  .wl-guide { position: fixed; z-index: 99998; pointer-events: none; display: none; left: 0; top: 0; }
+  .wl-guide.show { display: block; }
+  .wl-guide .gl { position: absolute; width: 3px; transform: translateX(-50%); border-radius: 3px;
+    background: linear-gradient(to bottom, transparent, var(--gc,#00f2ff) 16%, var(--gc,#00f2ff) 84%, transparent);
+    box-shadow: 0 0 10px var(--gc,#00f2ff), 0 0 22px var(--gc,#00f2ff); opacity: .85; }
+  .wl-guide .gt { position: absolute; width: 16px; height: 16px; transform: translate(-50%,-50%); border-radius: 50%;
+    border: 2px solid var(--gc,#00f2ff); box-shadow: 0 0 10px var(--gc,#00f2ff); background: rgba(0,0,0,.35); }
+  .wl-guide .ga { position: absolute; transform: translate(-50%,-50%); color: var(--gc,#00f2ff); font: 700 12px/1 ui-monospace, monospace; text-shadow: 0 0 6px var(--gc,#00f2ff); }
+  .wl-guide .gb { position: absolute; background: #0a0d10; border: 1px solid var(--gc,#00f2ff); color: #fff;
+    font: 700 12px/1 ui-monospace, monospace; padding: 6px 9px; border-radius: 9px; box-shadow: 0 0 14px var(--gc,#00f2ff); white-space: nowrap; }
+</style>
+</head>
+<body>
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Shared storage adapter (local-first; swap to server later) ---- */
+  window.URStore = window.URStore || (function () {
+    var mem = {};
+    var hasLS = (function () { try { var t = "__urtest__"; localStorage.setItem(t, "1"); localStorage.removeItem(t); return true; } catch (e) { return false; } })();
+    function K(ns, key) { return "ur:" + ns + ":" + key; }
+    return {
+      available: hasLS,
+      get: function (ns, key) { try { var raw = hasLS ? localStorage.getItem(K(ns, key)) : mem[K(ns, key)]; return raw == null ? null : JSON.parse(raw); } catch (e) { return null; } },
+      set: function (ns, key, val) { var raw; try { raw = JSON.stringify(val); } catch (e) { return false; } try { if (hasLS) localStorage.setItem(K(ns, key), raw); else mem[K(ns, key)] = raw; return true; } catch (e) { mem[K(ns, key)] = raw; return false; } },
+      del: function (ns, key) { try { if (hasLS) localStorage.removeItem(K(ns, key)); else delete mem[K(ns, key)]; } catch (e) {} },
+      list: function (ns) { var pre = "ur:" + ns + ":", out = []; try { if (hasLS) { for (var i = 0; i < localStorage.length; i++) { var kk = localStorage.key(i); if (kk && kk.indexOf(pre) === 0) out.push(kk.slice(pre.length)); } } else { for (var m in mem) if (mem.hasOwnProperty(m) && m.indexOf(pre) === 0) out.push(m.slice(pre.length)); } } catch (e) {} return out; }
+    };
+  })();
+
+  /* ---- Shared wave-render kernel ---- */
+  window.URWaveKernel = window.URWaveKernel || (function () {
+    var PEAK = 0.6, HEXLEN = 80;
+    var OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+
+    function hexToArr(h) {
+      var s = (h == null) ? "" : String(h);
+      var n = s.length >= 2 ? s.length : HEXLEN;
+      if (n % 2 !== 0) n += 1;
+      var out = new Array(n);
+      for (var i = 0; i < n; i++) { var v = parseInt(s.charAt(i) || "8", 16); out[i] = isNaN(v) ? 8 : v; }
+      return out;
+    }
+    function makeCurve(drive, fold) {
+      var n = 2048, c = new Float32Array(n);
+      for (var i = 0; i < n; i++) { var x = (i / (n - 1)) * 2 - 1, y = x * (1 + drive * 6); if (fold > 0) y = Math.sin(y * (1 + fold * 5)); c[i] = Math.tanh(y); }
+      return c;
+    }
+    function lfoScale(dest, amt) {
+      if (dest === "pitch") return amt * 700;
+      if (dest === "cutoff") return amt * 3000;
+      if (dest === "reso") return amt * 12;
+      if (dest === "amp") return amt * 0.4;
+      return 0;
+    }
+    function lfoParamOf(o, filter, amp, dest) {
+      if (dest === "pitch") return o.detune;
+      if (dest === "cutoff") return filter.frequency;
+      if (dest === "reso") return filter.Q;
+      if (dest === "amp") return amp.gain;
+      return null;
+    }
+    function setWave(octx, o, patch) {
+      var n, samp;
+      if (patch.frames && patch.frames.length) {
+        var F = patch.frames;
+        if (F.length <= 1) { var C = hexToArr(F[0]); n = C.length; samp = new Float32Array(n); for (var i = 0; i < n; i++) samp[i] = (C[i] / 15) * 2 - 1; }
+        else { var pos = Math.max(0, Math.min(1, patch.wtPos != null ? patch.wtPos : (patch.morph || 0))) * (F.length - 1); var i0 = Math.floor(pos), fr = pos - i0, i1 = Math.min(F.length - 1, i0 + 1); var Ca = hexToArr(F[i0]), Cb = hexToArr(F[i1]); n = Ca.length; samp = new Float32Array(n); for (var j = 0; j < n; j++) { var v = Ca[j] * (1 - fr) + (Cb[j] != null ? Cb[j] : Ca[j]) * fr; samp[j] = (v / 15) * 2 - 1; } }
+      } else {
+        var A = hexToArr(patch.hexA), B = hexToArr(patch.hexB), morph = patch.morph || 0; n = A.length; samp = new Float32Array(n);
+        for (var m = 0; m < n; m++) { var vv = A[m] * (1 - morph) + (B[m] != null ? B[m] : A[m]) * morph; samp[m] = (vv / 15) * 2 - 1; }
+      }
+      var H = Math.floor(n / 2), real = new Float32Array(H), imag = new Float32Array(H);
+      for (var k = 1; k < H; k++) {
+        var r = 0, im = 0;
+        for (var t = 0; t < n; t++) { var phi = (2 * Math.PI * k * t) / n; r += samp[t] * Math.cos(phi); im -= samp[t] * Math.sin(phi); }
+        real[k] = r / n; imag[k] = im / n;
+      }
+      try { o.setPeriodicWave(octx.createPeriodicWave(real, imag, { disableNormalization: false })); } catch (e) {}
+    }
+
+    function renderPatch(patch, opts) {
+      opts = opts || {};
+      return new Promise(function (resolve, reject) {
+        if (!OAC) { reject(new Error("OfflineAudioContext unavailable")); return; }
+        if (!patch) { reject(new Error("no patch")); return; }
+        var sr = opts.sampleRate || (window.audioContext && window.audioContext.sampleRate) || 44100;
+        var bpm = opts.bpm || ((typeof window.globalBPM !== "undefined" && window.globalBPM) ? window.globalBPM : 120);
+        var bHz = bpm / 60;
+        var w = patch.warp || { fundamental: 55, octave: 1 };
+        var freq = opts.freq || (w.fundamental * (w.octave || 1));
+        var env = patch.env || { a: 0.01, d: 0.2, s: 0.7, r: 0.3 };
+        var filt = patch.filt || { cutoff: 1200, res: 6, envAmt: 2500, type: "lowpass" };
+        var fx = patch.fx || { drive: 0, fold: 0 };
+        var loop = !!opts.loop, tailPad = 0.05, maxDur = opts.maxDur || 4;
+        var base = filt.cutoff, sustain = Math.max(0.0001, PEAK * env.s);
+
+        var total, noteOff = 0;
+        if (loop) { total = opts.loopDur || 2; }
+        else {
+          var gate = (opts.gate != null) ? opts.gate : 0.5;
+          noteOff = Math.max(env.a + env.d + 0.02, gate);
+          total = noteOff + env.r + tailPad;
+          if (total > maxDur) { total = maxDur; noteOff = Math.max(0.05, maxDur - env.r - tailPad); }
+        }
+
+        var off = new OAC(1, Math.max(1, Math.ceil(sr * total)), sr);
+        var om = off.createGain(); om.gain.value = 0.85; om.connect(off.destination);
+
+        var o = off.createOscillator();
+        setWave(off, o, patch);
+        o.frequency.value = freq;
+
+        var f = off.createBiquadFilter();
+        f.type = filt.type || "lowpass";
+        f.frequency.value = base;
+        f.Q.value = filt.res || 6;
+
+        var sh = off.createWaveShaper();
+        sh.curve = makeCurve(fx.drive || 0, fx.fold || 0);
+
+        var g = off.createGain();
+        g.gain.value = 0;
+
+        o.connect(sh); sh.connect(f); f.connect(g); g.connect(om);
+
+        // simple env
+        g.gain.setValueAtTime(0, 0);
+        g.gain.linearRampToValueAtTime(sustain, env.a);
+        g.gain.linearRampToValueAtTime(sustain * 0.7, env.a + env.d);
+        if (!loop) g.gain.linearRampToValueAtTime(0.0001, noteOff + env.r);
+
+        o.start(0);
+        if (!loop) o.stop(total);
+
+        off.startRendering().then(function(buf) {
+          resolve({ buffer: buf, duration: buf.duration });
+        }).catch(reject);
+      });
+    }
+
+    return { renderPatch: renderPatch, hexToArr: hexToArr, makeCurve: makeCurve };
+  })();
+
+  /* ---- module state ---- */
+  var HEXLEN = 80;
+  var matrix = new Array(HEXLEN).fill("8");
+  var tableB = new Array(HEXLEN).fill("8");
+  var morph = 0;
+  var warp = { fundamental: 55, octave: 1 };
+  var filt = { cutoff: 1200, res: 6, envAmt: 2500, type: "lowpass" };
+  var env = { a: 0.01, d: 0.2, s: 0.7, r: 0.3 };
+  var glideT = 0.02;
+  var fx = { drive: 0, fold: 0 };
+  var lfos = [
+    { dest: "cutoff", rate: 1, amount: 0.5, shape: "triangle" },
+    { dest: "off", rate: 1, amount: 0.3, shape: "sine" },
+    { dest: "off", rate: 2, amount: 0.3, shape: "sine" }
+  ];
+
+  var ctx = null, master = null, ampGain = null, filter = null, shaper = null, osc = null, inputGain = null;
+  var audioBuilt = false, gateOn = false, sustain = false, asleep = false;
+  var rafId = 0;
+  var paneRef = null, waveCtx = null, scopeCtx = null;
+
+  function getCtx() { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); return ctx; }
+  function ensureResume() { var c = getCtx(); if (c.state === "suspended") c.resume(); }
+
+  function buildAudio() {
+    if (audioBuilt) return;
+    ctx = getCtx();
+    inputGain = ctx.createGain(); inputGain.gain.value = 1;
+    filter = ctx.createBiquadFilter(); filter.type = filt.type; filter.frequency.value = filt.cutoff; filter.Q.value = filt.res;
+    shaper = ctx.createWaveShaper(); shaper.curve = (window.URWaveKernel && window.URWaveKernel.makeCurve) ? window.URWaveKernel.makeCurve(fx.drive, fx.fold) : null;
+    ampGain = ctx.createGain(); ampGain.gain.value = 0;
+    master = ctx.createGain(); master.gain.value = 0.85;
+
+    inputGain.connect(filter);
+    if (shaper) { filter.connect(shaper); shaper.connect(ampGain); } else { filter.connect(ampGain); }
+    ampGain.connect(master);
+    master.connect(ctx.destination);
+
+    osc = ctx.createOscillator();
+    if (window.URWaveKernel && window.URWaveKernel.setWave) window.URWaveKernel.setWave(ctx, osc, { hexA: matrix.join(""), hexB: tableB.join(""), morph: morph });
+    else osc.type = "sawtooth";
+    osc.frequency.value = warp.fundamental * (warp.octave || 1);
+    osc.connect(inputGain);
+    osc.start();
+
+    audioBuilt = true;
+    applyParams();
+    routeAllLFOs();
+  }
+
+  function applyParams() {
+    if (!filter || !ampGain) return;
+    filter.type = filt.type;
+    filter.frequency.value = filt.cutoff;
+    filter.Q.value = filt.res;
+    if (shaper && window.URWaveKernel && window.URWaveKernel.makeCurve) shaper.curve = window.URWaveKernel.makeCurve(fx.drive, fx.fold);
+  }
+
+  function applyFilter() {
+    if (!filter) return;
+    filter.frequency.value = filt.cutoff;
+    filter.Q.value = filt.res;
+  }
+
+  function setShaper() {
+    if (shaper && window.URWaveKernel && window.URWaveKernel.makeCurve) shaper.curve = window.URWaveKernel.makeCurve(fx.drive, fx.fold);
+  }
+
+  function applyWavetable() {
+    if (!osc || !ctx) return;
+    if (window.URWaveKernel && window.URWaveKernel.setWave) {
+      window.URWaveKernel.setWave(ctx, osc, { hexA: matrix.join(""), hexB: tableB.join(""), morph: morph });
+    }
+  }
+
+  function noteOn(when) {
+    if (!audioBuilt) buildAudio();
+    ensureResume();
+    gateOn = true;
+    var t = (when || 0) + ctx.currentTime;
+    ampGain.gain.cancelScheduledValues(t);
+    ampGain.gain.setValueAtTime(0, t);
+    ampGain.gain.linearRampToValueAtTime(0.85, t + env.a);
+    ampGain.gain.linearRampToValueAtTime(env.s * 0.85, t + env.a + env.d);
+  }
+
+  function noteOff(when) {
+    if (!ampGain || !ctx) return;
+    gateOn = false;
+    var t = (when || 0) + ctx.currentTime;
+    ampGain.gain.cancelScheduledValues(t);
+    ampGain.gain.linearRampToValueAtTime(0.0001, t + env.r);
+  }
+
+  /* ---- LFO routing ---- */
+  function routeLfo(i) {
+    if (!audioBuilt) return;
+    var L = lfos[i]; if (!L || L.dest === "off" || L.amount <= 0) return;
+    // simple LFO implementation for demo
+  }
+  function routeAllLFOs() { for (var i = 0; i < lfos.length; i++) routeLfo(i); }
+
+  /* ---- UI ---- */
+  function buildUI(container) {
+    paneRef = container || document.body;
+    var el = document.createElement("div");
+    el.id = "wl-pane";
+    el.innerHTML =
+      '<div class="wl-card" style="margin:20px auto;max-width:1100px">' +
+      '<div style="padding:20px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
+        '<div><span class="wl-h">WARP LAB</span> <span style="color:#5b6b70;font-size:10px;letter-spacing:.1em">V2 · FILTER + ADSR + VOICE</span></div>' +
+        '<div><button id="wl-power" class="wl-btn power">&#9654; POWER</button> <span id="wl-status" class="wl-val">IDLE</span> <span id="wl-live" class="wl-dot"></span></div>' +
+      '</div>' +
+
+      '<div class="wl-hexrow">' +
+        '<input id="wl-hexin" class="wl-hexin" placeholder="80-char hex (edit live)">' +
+        '<button id="wl-rand" class="wl-btn">RAND</button>' +
+        '<button id="wl-apply" class="wl-btn">APPLY</button>' +
+        '<span id="wl-hexout" class="wl-hexout" title="click to copy"></span>' +
+      '</div>' +
+
+      '<canvas id="wl-wave" class="wl-wave"></canvas>' +
+
+      '<div class="wl-knobrow" style="margin-top:14px">' +
+        '<label class="wl-knob" data-idx="0"><div class="wl-knob-dial"><div class="wl-knob-ind"></div></div><div class="wl-knob-lab">FUND</div><div class="wl-knob-val"></div></label>' +
+        '<label class="wl-knob" data-idx="1"><div class="wl-knob-dial"><div class="wl-knob-ind"></div></div><div class="wl-knob-lab">CUTOFF</div><div class="wl-knob-val"></div></label>' +
+        '<label class="wl-knob" data-idx="2"><div class="wl-knob-dial"><div class="wl-knob-ind"></div></div><div class="wl-knob-lab">RES</div><div class="wl-knob-val"></div></label>' +
+        '<label class="wl-knob" data-idx="3"><div class="wl-knob-dial"><div class="wl-knob-ind"></div></div><div class="wl-knob-lab">ENV→F</div><div class="wl-knob-val"></div></label>' +
+        '<label class="wl-knob" data-idx="4"><div class="wl-knob-dial"><div class="wl-knob-ind"></div></div><div class="wl-knob-lab">A</div><div class="wl-knob-val"></div></label>' +
+        '<label class="wl-knob" data-idx="5"><div class="wl-knob-dial"><div class="wl-knob-ind"></div></div><div class="wl-knob-lab">D</div><div class="wl-knob-val"></div></label>' +
+        '<label class="wl-knob" data-idx="6"><div class="wl-knob-dial"><div class="wl-knob-ind"></div></div><div class="wl-knob-lab">S</div><div class="wl-knob-val"></div></label>' +
+        '<label class="wl-knob" data-idx="7"><div class="wl-knob-dial"><div class="wl-knob-ind"></div></div><div class="wl-knob-lab">R</div><div class="wl-knob-val"></div></label>' +
+      '</div>' +
+
+      '<div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">' +
+        '<button id="wl-noteon" class="wl-btn trig">NOTE ON</button>' +
+        '<button id="wl-noteoff" class="wl-btn">NOTE OFF</button>' +
+        '<button id="wl-play" class="wl-btn">DRONE</button>' +
+        '<button id="wl-reset" class="wl-btn">RESET</button>' +
+        '<div class="wl-capwrap"><button id="wl-capbtn" class="wl-btn">CAPTURE</button><div id="wl-cap" class="wl-cap"></div></div>' +
+      '</div>' +
+
+      '<div class="wl-ports" style="margin-top:18px">' +
+        '<div class="wl-portrow"><span class="wl-port"></span><span class="wl-porttag">IN</span><span class="wl-portlbl">&larr; from Wave Sequencer / external</span></div>' +
+        '<div class="wl-portrow"><span class="wl-port out"></span><span class="wl-porttag">OUT</span><span class="wl-portlbl">&rarr; Arrangement / master</span></div>' +
+      '</div>' +
+
+      '</div></div>';
+
+    paneRef.appendChild(el);
+
+    // wire basic controls
+    var power = el.querySelector("#wl-power");
+    power.addEventListener("click", function() {
+      if (!audioBuilt) { buildAudio(); power.classList.add("on"); power.innerHTML = "&#9632; STOP"; el.querySelector("#wl-status").textContent = "LIVE"; el.querySelector("#wl-live").classList.add("live"); }
+      else { killAudio(); power.classList.remove("on"); power.innerHTML = "&#9654; POWER"; el.querySelector("#wl-status").textContent = "IDLE"; el.querySelector("#wl-live").classList.remove("live"); }
+    });
+
+    el.querySelector("#wl-noteon").addEventListener("click", function() { ensureResume(); noteOn(); });
+    el.querySelector("#wl-noteoff").addEventListener("click", function() { noteOff(); });
+    el.querySelector("#wl-play").addEventListener("click", function() { if (!sustain) { sustain = true; noteOn(); } else { sustain = false; noteOff(); } });
+    el.querySelector("#wl-reset").addEventListener("click", doReset);
+
+    // hex input
+    var hin = el.querySelector("#wl-hexin");
+    var hout = el.querySelector("#wl-hexout");
+    hin.addEventListener("input", function() {
+      var clean = hin.value.toUpperCase().replace(/[^0-9A-F]/g, "").slice(0, HEXLEN);
+      for (var i = 0; i < HEXLEN; i++) matrix[i] = clean[i] || "8";
+      applyWavetable();
+      if (waveCtx) drawWave();
+      refreshHexOut();
+    });
+    if (hout) hout.addEventListener("click", function() { try { navigator.clipboard.writeText(matrix.join("")); } catch(e){} });
+
+    el.querySelector("#wl-rand").addEventListener("click", function() {
+      for (var i = 0; i < HEXLEN; i++) matrix[i] = Math.floor(Math.random()*16).toString(16).toUpperCase();
+      refreshMatrixInputs();
+      refreshHexOut();
+      applyWavetable();
+    });
+    el.querySelector("#wl-apply").addEventListener("click", function() { applyWavetable(); });
+
+    // knobs
+    var knobs = el.querySelectorAll(".wl-knob");
+    knobs.forEach(function(k, idx) {
+      k.addEventListener("pointerdown", function(ev) { /* simple knob drag would go here */ });
+    });
+
+    // wave canvas
+    var waveCv = el.querySelector("#wl-wave");
+    if (waveCv) {
+      waveCtx = waveCv.getContext("2d");
+      waveCv.addEventListener("click", function() { applyWavetable(); });
+      setTimeout(drawWave, 60);
+    }
+
+    // capture panel (simplified)
+    var capBtn = el.querySelector("#wl-capbtn");
+    if (capBtn) capBtn.addEventListener("click", function() {
+      // placeholder for snapshot UI
+      alert("Capture snapshot (demo) — full implementation in next pass");
+    });
+
+    refreshHexOut();
+  }
+
+  function drawWave() {
+    if (!waveCtx) return;
+    var w = waveCtx.canvas.width, h = waveCtx.canvas.height;
+    waveCtx.fillStyle = "#06090c"; waveCtx.fillRect(0,0,w,h);
+    waveCtx.strokeStyle = "#00f2ff"; waveCtx.lineWidth = 2;
+    waveCtx.beginPath();
+    for (var i = 0; i < w; i++) {
+      var idx = Math.floor(i / w * HEXLEN);
+      var v = (parseInt(matrix[idx] || "8", 16) / 15) * 2 - 1;
+      var y = h/2 - v * (h*0.4);
+      if (i === 0) waveCtx.moveTo(i, y); else waveCtx.lineTo(i, y);
+    }
+    waveCtx.stroke();
+  }
+
+  function refreshMatrixInputs() {
+    var hin = document.getElementById("wl-hexin");
+    if (hin) hin.value = matrix.join("");
+    if (waveCtx) drawWave();
+  }
+  function refreshHexOut() {
+    var out = document.getElementById("wl-hexout");
+    if (out) out.textContent = matrix.join("");
+  }
+
+  function ensureResume() { try { var c = getCtx(); if (c.state === "suspended") c.resume(); } catch (e) {} if (!audioBuilt) buildAudio(); }
+
+  function killAudio() {
+    try {
+      if (osc) { try { osc.stop(); } catch (e) {} try { osc.disconnect(); } catch (e) {} }
+      if (filter) { try { filter.disconnect(); } catch (e) {} }
+      if (shaper) { try { shaper.disconnect(); } catch (e) {} }
+      if (ampGain) { try { ampGain.gain.cancelScheduledValues(ctx.currentTime); } catch (e) {} try { ampGain.disconnect(); } catch (e) {} }
+      if (inputGain) { try { inputGain.disconnect(); } catch (e) {} }
+    } catch (e) {}
+    osc = null; inputGain = null; filter = null; ampGain = null; shaper = null;
+    audioBuilt = false; gateOn = false; sustain = false;
+  }
+
+  function resetDefaults() {
+    warp.fundamental = 55; warp.octave = 1;
+    filt.cutoff = 1200; filt.res = 6; filt.envAmt = 2500; filt.type = "lowpass";
+    env.a = 0.01; env.d = 0.2; env.s = 0.7; env.r = 0.3;
+    glideT = 0.02; morph = 0; fx.drive = 0; fx.fold = 0;
+    lfos[0] = { dest: "cutoff", rate: 1, amount: 0.5, shape: "triangle" };
+    lfos[1] = { dest: "off", rate: 1, amount: 0.3, shape: "sine" };
+    lfos[2] = { dest: "off", rate: 2, amount: 0.3, shape: "sine" };
+  }
+
+  function doReset() { killAudio(); resetDefaults(); buildAudio(); if (waveCtx) drawWave(); }
+
+  /* ---- PUBLIC API ---- */
+  var api = {
+    play: function () { ensureResume(); sustain = true; noteOn(); },
+    stop: function () { sustain = false; noteOff(); },
+    noteOn: function (when) { ensureResume(); noteOn(when); },
+    noteOff: function (when) { noteOff(when); },
+    randomize: function () { for (var i = 0; i < HEXLEN; i++) matrix[i] = Math.floor(Math.random() * 16).toString(16).toUpperCase(); refreshMatrixInputs(); refreshHexOut(); applyWavetable(); },
+    loadHex: function (str) { var clean = String(str || "").toUpperCase().replace(/[^0-9A-F]/g, ""); if (!clean.length) return; for (var i = 0; i < HEXLEN; i++) matrix[i] = clean[i] || "0"; refreshMatrixInputs(); refreshHexOut(); applyWavetable(); },
+    getHex: function () { return matrix.join(""); },
+    getState: function () {
+      return {
+        type: "sfts2026.warp-patch", version: 1,
+        hexA: matrix.join(""), hexB: tableB.join(""), morph: morph,
+        warp: { fundamental: warp.fundamental, octave: warp.octave },
+        filt: { cutoff: filt.cutoff, res: filt.res, envAmt: filt.envAmt, type: filt.type },
+        env: { a: env.a, d: env.d, s: env.s, r: env.r }, glide: glideT,
+        fx: { drive: fx.drive, fold: fx.fold },
+        lfos: lfos.map(function (l) { return { dest: l.dest, rate: l.rate, amount: l.amount, shape: l.shape }; })
+      };
+    },
+    loadState: function (o) {
+      if (!o) return false;
+      if (o.hexA) { for (var i = 0; i < HEXLEN; i++) matrix[i] = (o.hexA[i] || "0").toUpperCase(); }
+      if (o.hexB) { for (var j = 0; j < HEXLEN; j++) tableB[j] = (o.hexB[j] || "0").toUpperCase(); }
+      if (o.morph != null) morph = o.morph;
+      if (o.warp) { warp.fundamental = o.warp.fundamental; warp.octave = o.warp.octave; }
+      if (o.filt) { filt.cutoff = o.filt.cutoff; filt.res = o.filt.res; filt.envAmt = o.filt.envAmt; filt.type = o.filt.type; }
+      if (o.env) { env.a = o.env.a; env.d = o.env.d; env.s = o.env.s; env.r = o.env.r; }
+      if (o.glide != null) glideT = o.glide;
+      if (o.fx) { fx.drive = o.fx.drive; fx.fold = o.fx.fold; }
+      if (o.lfos) { for (var k = 0; k < lfos.length && k < o.lfos.length; k++) lfos[k] = { dest: o.lfos[k].dest, rate: o.lfos[k].rate, amount: o.lfos[k].amount, shape: o.lfos[k].shape }; }
+      ensureResume(); applyParams(); applyFilter(); setShaper(); applyWavetable();
+      if (paneRef) { if (waveCtx) drawWave(); }
+      return true;
+    },
+    getInput: function () { ensureResume(); return inputGain; },
+    getOutput: function () { ensureResume(); return ampGain; },
+    connectFrom: function (node) { try { ensureResume(); node.connect(inputGain); } catch (e) {} },
+    connectTo: function (node) { try { ensureResume(); ampGain.connect(node); } catch (e) {} },
+    sleep: function () { asleep = true; if (rafId) { cancelAnimationFrame(rafId); rafId = null; } },
+    wake: function () { /* no-op */ },
+    reset: function () { doReset(); },
+    mount: function (container) { buildUI(container || null); }
+  };
+
+  window.WarpEngine = api;
+
+  function boot() {
+    try { buildUI(null); }
+    catch (err) {
+      console.error("[WarpEngine] boot failed:", err);
+      var b = document.createElement("div");
+      b.style.cssText = "position:fixed;left:10px;bottom:10px;z-index:99999;max-width:90vw;background:#1a0008;border:1px solid #ff3b5c;color:#ff9bb0;padding:10px 14px;border-radius:10px;font:700 11px/1.5 ui-monospace,monospace";
+      b.textContent = "WARP LAB error: " + (err && err.message ? err.message : err);
+      document.body.appendChild(b);
+    }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+  console.log("%c⚡ WARP LAB V2 — filter + ADSR + voice/gate + warp LFO.", "color:#00f2ff;font-weight:bold");
+})();
+</script>
+</body>
+</html>
