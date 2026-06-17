@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Piano Roll / Synth &middot; URSPACE / SFTS2026</title>
+<style>
+  html, body { margin: 0; background: #05080b; color: #cfe9ec; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  #pr-pane { max-width: 980px; margin: 0 auto; padding: 18px 16px 60px; }
+  #pr-pane * { box-sizing: border-box; }
+  #pr-pane .pr-err { display: none; margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: #2a0d11; border: 1px solid #ff5b6c; color: #ffb3bb; font-size: 12px; white-space: pre-wrap; }
+  #pr-pane .pr-card { background: rgba(10,12,16,.72); border: 1px solid rgba(0,242,255,.35); border-radius: 22px; padding: 18px; box-shadow: inset 0 0 60px rgba(0,242,255,.04); }
+  #pr-pane .pr-h { font: 700 11px/1 ui-monospace, monospace; letter-spacing: .22em; text-transform: uppercase; color: #5b6b70; }
+  #pr-pane .pr-title { font: 800 20px/1 ui-monospace, monospace; letter-spacing: .04em; color: #e6f7fa; margin: 2px 0 14px; }
+  #pr-pane .pr-title small { display: block; font: 700 9px/1.4 ui-monospace, monospace; letter-spacing: .2em; color: #46585e; margin-top: 6px; }
+  #pr-pane .pr-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+  #pr-pane .pr-btn { font: 700 11px/1 ui-monospace, monospace; padding: 9px 13px; border-radius: 10px; cursor: pointer; background: rgba(0,242,255,.08); border: 1px solid rgba(0,242,255,.32); color: #bdeef4; user-select: none; }
+  #pr-pane .pr-btn:hover { background: rgba(0,242,255,.16); }
+  #pr-pane .pr-btn.on { background: #00f2ff; color: #04222a; border-color: #00f2ff; }
+  #pr-pane .pr-btn.warn { border-color: #ff5b6c55; color: #ff8a97; background: transparent; }
+  #pr-pane .pr-label { font: 700 9px/1 ui-monospace, monospace; letter-spacing: .14em; color: #5b6b70; }
+  #pr-pane .pr-num { width: 60px; background: #0b0f14; border: 1px solid #22303a; border-radius: 8px; color: #e6f7fa; padding: 6px 8px; font: 700 11px/1 ui-monospace, monospace; }
+  #pr-pane select.pr-sel { background: #0b0f14; border: 1px solid #22303a; border-radius: 8px; color: #e6f7fa; padding: 6px 8px; font: 700 10px/1 ui-monospace, monospace; }
+  #pr-pane .pr-scroll { overflow: auto; border: 1px solid #16202a; border-radius: 12px; background: #06090c; height: 380px; scrollbar-color: #1d6b78 #0a1015; scrollbar-width: thin; }
+  #pr-pane .pr-scroll::-webkit-scrollbar { width: 13px; height: 13px; }
+  #pr-pane .pr-scroll::-webkit-scrollbar-track { background: #0a1015; border-radius: 8px; }
+  #pr-pane .pr-scroll::-webkit-scrollbar-thumb { background: #1d6b78; border-radius: 8px; border: 2px solid #0a1015; }
+  #pr-pane .pr-scroll::-webkit-scrollbar-thumb:hover { background: #2a8e9e; }
+  #pr-pane .pr-scroll::-webkit-scrollbar-corner { background: #0a1015; }
+  #pr-pane .pr-synth { display: none; margin-top: 8px; padding: 11px 12px; border: 1px solid #16323a; border-radius: 12px; background: #070d11; }
+  #pr-pane .pr-synth.open { display: block; }
+  #pr-pane .pr-synthhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; font: 800 10px/1.2 ui-monospace, monospace; color: #7fdfff; letter-spacing: .06em; }
+  #pr-pane .pr-synthhead b { color: #bdeef4; }
+  #pr-pane .pr-sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 9px 14px; }
+  #pr-pane .pr-sgroup { grid-column: 1 / -1; font: 800 9px/1 ui-monospace, monospace; color: #4fb9c8; letter-spacing: .12em; margin: 5px 0 1px; }
+  #pr-pane .pr-ctl { display: flex; flex-direction: column; gap: 3px; }
+  #pr-pane .pr-ctl > label { display: flex; justify-content: space-between; font: 700 9px/1.1 ui-monospace, monospace; color: #6fd2e0; letter-spacing: .03em; }
+  #pr-pane .pr-ctl > label .v { color: #bdeef4; font-weight: 800; }
+  #pr-pane .pr-ctl input[type=range] { width: 100%; height: 22px; accent-color: #00c8d8; cursor: pointer; }
+  #pr-pane .pr-ctl select { width: 100%; }
+  #pr-pane .pr-canvas { display: block; touch-action: none; }
+  #pr-pane .pr-capwrap { position: relative; display: inline-block; }
+  #pr-pane .pr-cap { position: absolute; z-index: 40; left: 0; top: calc(100% + 6px); width: 250px; max-height: 320px; overflow: auto; background: #0b0f14; border: 1px solid rgba(0,242,255,.35); border-radius: 14px; padding: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.6); display: none; }
+  #pr-pane .pr-cap.open { display: block; }
+  #pr-pane .pr-caph { font: 800 9px/1 ui-monospace, monospace; letter-spacing: .18em; color: #5b6b70; margin: 2px 0 8px; }
+  #pr-pane .pr-pick { display: block; width: 100%; text-align: left; font: 700 10px/1.3 ui-monospace, monospace; padding: 7px 8px; margin-bottom: 4px; background: rgba(0,242,255,.06); border: 1px solid #22303a; border-radius: 8px; color: #cfe9ec; cursor: pointer; }
+  #pr-pane .pr-pick:hover { border-color: #00f2ff; color: #fff; }
+  #pr-pane .pr-ports { margin-top: 16px; padding: 12px 14px; border: 1px dashed #2a3a44; border-radius: 14px; background: rgba(0,242,255,.03); }
+  #pr-pane .pr-portrow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid #141a1f; }
+  #pr-pane .pr-port { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto; border: 2px solid #00f2ff; box-shadow: 0 0 6px rgba(0,242,255,.5); }
+  #pr-pane .pr-port.inp { border-color: #ffb24d; box-shadow: 0 0 6px rgba(255,178,77,.5); }
+  #pr-pane .pr-port.future { border-color: #3a4a52; box-shadow: none; opacity: .5; }
+  #pr-pane .pr-porttag { font: 800 8px/1 ui-monospace, monospace; letter-spacing: .1em; color: #9fc7cd; min-width: 92px; }
+  #pr-pane .pr-portlbl { font: 600 11px/1.3 ui-monospace, monospace; color: #6c7a80; }
+  #pr-pane .pr-note { font: 600 10px/1.5 ui-monospace, monospace; color: #56666c; margin-top: 12px; }
+</style>
+</head>
+<body>
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Shared storage adapter (guarded singleton) ---- */
+  window.URStore = window.URStore || (function () {
+    var mem = {};
+    var hasLS = (function () { try { var t = "__urtest__"; localStorage.setItem(t, "1"); localStorage.removeItem(t); return true; } catch (e) { return false; } })();
+    function K(ns, key) { return "ur:" + ns + ":" + key; }
+    return {
+      available: hasLS,
+      get: function (ns, key) { try { var raw = hasLS ? localStorage.getItem(K(ns, key)) : mem[K(ns, key)]; return raw == null ? null : JSON.parse(raw); } catch (e) { return null; } },
+      set: function (ns, key, val) { var raw; try { raw = JSON.stringify(val); } catch (e) { return false; } try { if (hasLS) localStorage.setItem(K(ns, key), raw); else mem[K(ns, key)] = raw; return true; } catch (e) { mem[K(ns, key)] = raw; return false; } },
+      del: function (ns, key) { try { if (hasLS) localStorage.removeItem(K(ns, key)); else delete mem[K(ns, key)]; } catch (e) {} },
+      list: function (ns) { var pre = "ur:" + ns + ":", out = []; try { if (hasLS) { for (var i = 0; i < localStorage.length; i++) { var kk = localStorage.key(i); if (kk && kk.indexOf(pre) === 0) out.push(kk.slice(pre.length)); } } else { for (var m in mem) if (mem.hasOwnProperty(m) && m.indexOf(pre) === 0) out.push(m.slice(pre.length)); } } catch (e) {} return out; }
+    };
+  })();
+
+  /* ---- Shared factory voice bank (procedural; reusable across modules) ---- */
+  window.URFactoryVoices = window.URFactoryVoices || (function () {
+    var PI2 = Math.PI * 2;
+    function buildHex(fn) {
+      var n = 80, s = new Float32Array(n), peak = 0, i;
+      for (i = 0; i < n; i++) { var v = fn(i / n); s[i] = v; var a = Math.abs(v); if (a > peak) peak = a; }
+      var sc = peak > 1e-6 ? 1 / peak : 1, out = "";
+      for (i = 0; i < n; i++) { var c = Math.round(((s[i] * sc) + 1) / 2 * 15); c = Math.max(0, Math.min(15, c)); out += c.toString(16).toUpperCase(); }
+      return out;
+    }
+    function harm(list) { return buildHex(function (t) { var ss = 0; for (var k = 0; k < list.length; k++) ss += list[k] * Math.sin(PI2 * (k + 1) * t); return ss; }); }
+    var wSine = buildHex(function (t) { return Math.sin(PI2 * t); });
+    var wSaw = buildHex(function (t) { return 2 * t - 1; });
+    var wSquare = buildHex(function (t) { return t < 0.5 ? 1 : -1; });
+    var wTri = buildHex(function (t) { return t < 0.5 ? (4 * t - 1) : (3 - 4 * t); });
+    var wPulse = buildHex(function (t) { return t < 0.25 ? 1 : -1; });
+    var wOrgan = harm([1, 0.7, 0.5, 0, 0.35, 0, 0, 0.25]);
+    var wEP = harm([1, 0, 0.5, 0, 0, 0, 0.25]);
+    var wBell = harm([1, 0, 0, 0, 0.6, 0, 0.4, 0, 0, 0, 0.3]);
+    var wHollow = harm([1, 0, 0.5, 0, 0.33, 0, 0.25]);
+    var wWarm = harm([1, 0.5, 0.33, 0.25, 0.2, 0.16, 0.14]);
+    var wFlute = harm([1, 0.15, 0.05]);
+    function off3() { return [{ dest: "off", rate: 1, amount: 0, shape: "sine" }, { dest: "off", rate: 1, amount: 0, shape: "sine" }, { dest: "off", rate: 1, amount: 0, shape: "sine" }]; }
+    function lfo1(dest, rate, amount, shape) { return [{ dest: dest, rate: rate, amount: amount, shape: shape }, { dest: "off", rate: 1, amount: 0, shape: "sine" }, { dest: "off", rate: 1, amount: 0, shape: "sine" }]; }
+    function V(name, cat, hex, filt, env, fx, lfos, oct) {
+      return { name: name, category: cat, patch: { type: "sfts2026.warp-patch", version: 1, hexA: hex, hexB: hex, morph: 0, warp: { fundamental: 220, octave: oct || 1 }, filt: filt, env: env, glide: 0, fx: fx || { drive: 0, fold: 0 }, lfos: lfos || off3() } };
+    }
+    return [
+      V("Synth Keys", "keys", wSaw, { cutoff: 2400, res: 3, envAmt: 1800, type: "lowpass" }, { a: 0.005, d: 0.35, s: 0.4, r: 0.35 }, { drive: 0.1, fold: 0 }),
+      V("Electric Piano", "keys", wEP, { cutoff: 3200, res: 2, envAmt: 1200, type: "lowpass" }, { a: 0.004, d: 0.6, s: 0.2, r: 0.4 }, { drive: 0.05, fold: 0 }),
+      V("Organ", "keys", wOrgan, { cutoff: 6000, res: 1, envAmt: 0, type: "lowpass" }, { a: 0.01, d: 0.05, s: 1, r: 0.12 }, { drive: 0, fold: 0 }),
+      V("Sub Bass", "bass", wSine, { cutoff: 600, res: 2, envAmt: 400, type: "lowpass" }, { a: 0.006, d: 0.2, s: 0.7, r: 0.2 }, { drive: 0.05, fold: 0 }, off3(), 0.5),
+      V("Reese Bass", "bass", wSaw, { cutoff: 800, res: 9, envAmt: 600, type: "lowpass" }, { a: 0.006, d: 0.25, s: 0.8, r: 0.25 }, { drive: 0.3, fold: 0.1 }, lfo1("cutoff", 0.5, 0.3, "triangle"), 0.5),
+      V("Bass Synth", "bass", wSquare, { cutoff: 900, res: 4, envAmt: 800, type: "lowpass" }, { a: 0.005, d: 0.2, s: 0.6, r: 0.2 }, { drive: 0.15, fold: 0 }, off3(), 0.5),
+      V("Saw Lead", "lead", wSaw, { cutoff: 4500, res: 4, envAmt: 2500, type: "lowpass" }, { a: 0.005, d: 0.3, s: 0.5, r: 0.3 }, { drive: 0.15, fold: 0 }, lfo1("pitch", 3, 0.06, "sine")),
+      V("Square Lead", "lead", wSquare, { cutoff: 4000, res: 3, envAmt: 2200, type: "lowpass" }, { a: 0.005, d: 0.25, s: 0.5, r: 0.3 }, { drive: 0.1, fold: 0 }, lfo1("pitch", 3, 0.05, "sine")),
+      V("Pulse Lead", "lead", wPulse, { cutoff: 3800, res: 5, envAmt: 2400, type: "lowpass" }, { a: 0.005, d: 0.3, s: 0.45, r: 0.3 }, { drive: 0.1, fold: 0 }, lfo1("cutoff", 1, 0.25, "sine")),
+      V("Warm Pad", "pad", wWarm, { cutoff: 1800, res: 2, envAmt: 1200, type: "lowpass" }, { a: 0.6, d: 0.8, s: 0.85, r: 1.2 }, { drive: 0.05, fold: 0 }, lfo1("cutoff", 0.25, 0.2, "sine")),
+      V("Strings", "pad", wSaw, { cutoff: 2600, res: 2, envAmt: 1400, type: "lowpass" }, { a: 0.25, d: 0.5, s: 0.9, r: 0.6 }, { drive: 0.05, fold: 0 }, lfo1("pitch", 1, 0.02, "sine")),
+      V("Pluck", "pluck", wTri, { cutoff: 3000, res: 4, envAmt: 2600, type: "lowpass" }, { a: 0.003, d: 0.18, s: 0, r: 0.2 }, { drive: 0.1, fold: 0 }),
+      V("Bell", "bell", wBell, { cutoff: 7000, res: 1, envAmt: 0, type: "lowpass" }, { a: 0.002, d: 1.2, s: 0.1, r: 0.9 }, { drive: 0, fold: 0 }),
+      V("Brass", "brass", wSaw, { cutoff: 1600, res: 3, envAmt: 3000, type: "lowpass" }, { a: 0.08, d: 0.3, s: 0.7, r: 0.3 }, { drive: 0.15, fold: 0 }),
+      V("Flute", "wind", wFlute, { cutoff: 4000, res: 1, envAmt: 800, type: "lowpass" }, { a: 0.06, d: 0.2, s: 0.85, r: 0.3 }, { drive: 0, fold: 0 }, lfo1("pitch", 2, 0.03, "sine")),
+      V("Hollow Vox", "pad", wHollow, { cutoff: 2200, res: 3, envAmt: 1500, type: "lowpass" }, { a: 0.05, d: 0.3, s: 0.7, r: 0.4 }, { drive: 0.05, fold: 0 })
+    ];
+  })();
+
+  if (window.PianoRoll) return; // idempotent
+
+  /* shared synth helpers */
+  var PEAK = 0.5;
+  function hexToArr(h) { var s = (h == null) ? "" : String(h); var n = s.length >= 2 ? s.length : 80; if (n % 2 !== 0) n += 1; var a = new Array(n); for (var i = 0; i < n; i++) { var v = parseInt(s.charAt(i) || "8", 16); a[i] = isNaN(v) ? 8 : v; } return a; }
+  function makeCurve(drive, fold) { var n = 2048, c = new Float32Array(n); for (var i = 0; i < n; i++) { var x = (i / (n - 1)) * 2 - 1, y = x * (1 + drive * 6); if (fold > 0) y = Math.sin(y * (1 + fold * 5)); c[i] = Math.tanh(y); } return c; }
+  function lfoScale(dest, amt) { if (dest === "pitch") return amt * 700; if (dest === "cutoff") return amt * 3000; if (dest === "reso") return amt * 12; if (dest === "amp") return amt * 0.4; return 0; }
+  function lfoParamOf(o, filter, amp, dest) { if (dest === "pitch") return o.detune; if (dest === "cutoff") return filter.frequency; if (dest === "reso") return filter.Q; if (dest === "amp") return amp.gain; return null; }
+
+  /* ---- module ---- */
+  var LOW = 36, HIGH = 84, NUMROWS = HIGH - LOW + 1;
+  var GUTTER = 52, BASE_PXB = 46, BASE_ROWH = 14, zoom = 1, rowH = 14, eraseMode = false, chordMode = "off", scrollPlay = false;
+  var NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  function isBlack(m) { var k = ((m % 12) + 12) % 12; return (k === 1 || k === 3 || k === 6 || k === 8 || k === 10); }
+  function noteName(m) { return NOTE_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); }
+  function freqFromMidi(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+  var DEFAULT_HEX = (function () { var s = ""; for (var i = 0; i < 80; i++) s += Math.round(i / 79 * 15).toString(16).toUpperCase(); return s; })();
+  function defaultVoice() {
+    return { type: "sfts2026.warp-patch", version: 1, hexA: DEFAULT_HEX, hexB: DEFAULT_HEX, morph: 0,
+      warp: { fundamental: 220, octave: 1 }, filt: { cutoff: 2500, res: 4, envAmt: 1800, type: "lowpass" },
+      env: { a: 0.005, d: 0.25, s: 0.55, r: 0.3 }, glide: 0, fx: { drive: 0.1, fold: 0 },
+      lfos: [{ dest: "off", rate: 1, amount: 0, shape: "sine" }, { dest: "off", rate: 1, amount: 0, shape: "sine" }, { dest: "off", rate: 1, amount: 0, shape: "sine" }] };
+  }
+
+  var roll = { bpm: 120, loop: true, lengthBeats: 16, snap: 0.25, voice: null, voiceBase: null, voiceName: "Default", notes: [] };
+  var nextId = 1, paneRef = null, cv = null, cctx = null, pxPerBeat = 46;
+
+  /* ---------------- AUDIO ---------------- */
+  function getCtx() {
+    try { if (typeof initAudio === "function") { var c = initAudio(); if (c) return c; } } catch (e) {}
+    if (typeof audioContext !== "undefined" && audioContext) return audioContext;
+    if (window.audioContext) return window.audioContext;
+    window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    return window.audioContext;
+  }
+  function ensureResume() { var c = getCtx(); if (c.state === "suspended") c.resume(); }
+
+  var ctx = null, master = null, audioBuilt = false;
+  function buildAudio() {
+    if (audioBuilt) return;
+    ctx = getCtx();
+    master = ctx.createGain(); master.gain.value = 0.85;
+    master.connect(ctx.destination);
+    audioBuilt = true;
+  }
+
+  function spawnVoice(freq, when, dur, vel) {
+    ensureResume();
+    if (!roll.voice) roll.voice = defaultVoice();
+    var p = roll.voice;
+    var o = ctx.createOscillator();
+    var g = ctx.createGain();
+    var f = ctx.createBiquadFilter();
+    var sh = ctx.createWaveShaper();
+
+    o.frequency.value = freq;
+    f.type = p.filt.type || "lowpass";
+    f.frequency.value = p.filt.cutoff || 2500;
+    f.Q.value = p.filt.res || 4;
+
+    sh.curve = makeCurve(p.fx.drive || 0, p.fx.fold || 0);
+
+    var env = p.env || { a: 0.005, d: 0.25, s: 0.55, r: 0.3 };
+    g.gain.value = 0;
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime((vel||0.8) * 0.9, when + env.a);
+    g.gain.linearRampToValueAtTime((vel||0.8) * env.s, when + env.a + env.d);
+    g.gain.linearRampToValueAtTime(0.0001, when + env.a + env.d + env.r);
+
+    o.connect(sh); sh.connect(f); f.connect(g); g.connect(master);
+    o.start(when);
+    o.stop(when + dur + 0.2);
+  }
+
+  /* ---------------- ROLL LOGIC ---------------- */
+  function sizeCanvas() {
+    if (!cv) return;
+    var W = cv.parentElement.clientWidth - 4;
+    cv.width = Math.max(600, W);
+    cv.height = NUMROWS * rowH * zoom;
+    pxPerBeat = BASE_PXB * zoom;
+  }
+  function redraw() {
+    if (!cctx || !cv) return;
+    var W = cv.width, H = cv.height;
+    cctx.fillStyle = "#05080b"; cctx.fillRect(0, 0, W, H);
+    // grid
+    cctx.strokeStyle = "#16202a"; cctx.lineWidth = 1;
+    for (var b = 0; b <= roll.lengthBeats; b++) {
+      var x = b * pxPerBeat;
+      cctx.beginPath(); cctx.moveTo(x, 0); cctx.lineTo(x, H); cctx.stroke();
+    }
+    for (var r = 0; r <= NUMROWS; r++) {
+      var y = r * rowH * zoom;
+      cctx.beginPath(); cctx.moveTo(0, y); cctx.lineTo(W, y); cctx.stroke();
+    }
+    // notes
+    roll.notes.forEach(function(n) {
+      var x = n.start * pxPerBeat;
+      var y = (HIGH - n.pitch) * rowH * zoom;
+      var w = n.len * pxPerBeat;
+      var h = rowH * zoom - 1;
+      cctx.fillStyle = (n.id === selId) ? "#00f2ff" : "#4fd8ff";
+      cctx.fillRect(x, y, w, h);
+      cctx.strokeStyle = "#0a0d10";
+      cctx.strokeRect(x, y, w, h);
+    });
+    // playhead
+    if (playing) {
+      var px = playhead * pxPerBeat;
+      cctx.strokeStyle = "#41ffb0";
+      cctx.lineWidth = 2;
+      cctx.beginPath(); cctx.moveTo(px, 0); cctx.lineTo(px, H); cctx.stroke();
+    }
+  }
+
+  var playing = false, playhead = 0, rafId = null, selId = null;
+  function startPlay() {
+    if (playing) return;
+    playing = true;
+    playhead = 0;
+    var last = performance.now();
+    function loop(now) {
+      if (!playing) return;
+      var dt = (now - last) / 1000; last = now;
+      playhead += dt * (roll.bpm / 60);
+      if (roll.loop && playhead > roll.lengthBeats) playhead = 0;
+      redraw();
+      rafId = requestAnimationFrame(loop);
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+  function stopPlay() {
+    playing = false;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    redraw();
+  }
+
+  function addNote(pitch, start, len, vel) {
+    var n = { id: "n" + (nextId++), pitch: pitch, start: start, len: len || 0.5, vel: vel || 0.8 };
+    roll.notes.push(n);
+    persist();
+    redraw();
+    return n;
+  }
+  function removeNote(id) {
+    roll.notes = roll.notes.filter(function(n) { return n.id !== id; });
+    if (selId === id) selId = null;
+    persist();
+    redraw();
+  }
+
+  /* ---------------- PERSIST ---------------- */
+  function persist() {
+    try { window.URStore.set("piano-roll", "state", roll); } catch(e){}
+  }
+  function restore() {
+    var st = window.URStore.get("piano-roll", "state");
+    if (st) {
+      if (st.bpm) roll.bpm = st.bpm;
+      if (st.lengthBeats) roll.lengthBeats = st.lengthBeats;
+      if (st.snap) roll.snap = st.snap;
+      if (st.notes) roll.notes = st.notes;
+      if (st.loop != null) roll.loop = st.loop;
+    }
+  }
+
+  /* ---------------- INPUT ---------------- */
+  function wireCanvas() {
+    if (!cv) return;
+    var dragging = false, dragId = null, dragStartX = 0, dragStartBeat = 0;
+    cv.addEventListener("pointerdown", function(e) {
+      var rect = cv.getBoundingClientRect();
+      var x = e.clientX - rect.left, y = e.clientY - rect.top;
+      var beat = x / pxPerBeat;
+      var pitch = HIGH - Math.floor(y / (rowH * zoom));
+      // find note under cursor
+      var hit = roll.notes.find(function(n) {
+        return pitch === n.pitch && beat >= n.start && beat <= n.start + n.len;
+      });
+      if (hit) {
+        selId = hit.id;
+        if (e.detail === 2) { removeNote(hit.id); return; }
+        dragging = true;
+        dragId = hit.id;
+        dragStartX = x;
+        dragStartBeat = hit.start;
+      } else {
+        // draw new
+        var n = addNote(pitch, Math.round(beat * 4) / 4, 0.5);
+        selId = n.id;
+        dragging = true;
+        dragId = n.id;
+        dragStartX = x;
+        dragStartBeat = n.start;
+      }
+      redraw();
+    });
+    cv.addEventListener("pointermove", function(e) {
+      if (!dragging || !dragId) return;
+      var rect = cv.getBoundingClientRect();
+      var x = e.clientX - rect.left;
+      var db = (x - dragStartX) / pxPerBeat;
+      var n = roll.notes.find(function(nn) { return nn.id === dragId; });
+      if (n) {
+        n.start = Math.max(0, dragStartBeat + db);
+        redraw();
+      }
+    });
+    cv.addEventListener("pointerup", function() {
+      if (dragging) { persist(); }
+      dragging = false; dragId = null;
+    });
+    cv.addEventListener("pointercancel", function() { dragging = false; dragId = null; });
+  }
+
+  /* ---------------- UI ---------------- */
+  function refreshControls() {
+    if (!paneRef) return;
+    paneRef.querySelector("#pr-bpm").value = roll.bpm;
+    paneRef.querySelector("#pr-loop").classList.toggle("on", roll.loop);
+    paneRef.querySelector("#pr-bars").value = Math.floor(roll.lengthBeats / 4);
+    paneRef.querySelector("#pr-snap").value = roll.snap;
+  }
+
+  function paneHTML() {
+    return '' +
+    '<div class="pr-card">' +
+    '<div class="pr-title">PIANO ROLL <small>live wavetable voice + arrangement bridge</small></div>' +
+    '<div class="pr-row">' +
+      '<button class="pr-btn" id="pr-play">PLAY</button>' +
+      '<button class="pr-btn" id="pr-stop">STOP</button>' +
+      '<span class="pr-label">BPM</span><input class="pr-num" id="pr-bpm" type="number" value="120">' +
+      '<button class="pr-btn" id="pr-loop">LOOP</button>' +
+      '<button class="pr-btn" id="pr-flow">FLOW</button>' +
+      '<span class="pr-label">BARS</span><select class="pr-sel" id="pr-bars"><option value="1">1</option><option value="2">2</option><option value="4" selected>4</option><option value="8">8</option></select>' +
+      '<span class="pr-label">SNAP</span><select class="pr-sel" id="pr-snap"><option value="0.0625">1/16</option><option value="0.125">1/8</option><option value="0.25" selected>1/4</option><option value="0.5">1/2</option></select>' +
+    '</div>' +
+    '<div class="pr-row">' +
+      '<button class="pr-btn" id="pr-soundbtn">SOUND &#9662;</button>' +
+      '<button class="pr-btn" id="pr-voicebtn">VOICE</button>' +
+      '<div class="pr-capwrap"><div id="pr-voice" class="pr-cap"></div></div>' +
+      '<button class="pr-btn" id="pr-delsel">DEL SEL</button>' +
+      '<button class="pr-btn" id="pr-zoomin">ZOOM +</button>' +
+      '<button class="pr-btn" id="pr-zoomout">ZOOM -</button>' +
+      '<button class="pr-btn" id="pr-erase">ERASE</button>' +
+      '<button class="pr-btn" id="pr-chord">CHORD: OFF</button>' +
+      '<button class="pr-btn" id="pr-clear">CLEAR</button>' +
+      '<button class="pr-btn" id="pr-copy">COPY</button>' +
+      '<button class="pr-btn" id="pr-dl">DOWNLOAD</button>' +
+      '<button class="pr-btn" id="pr-loadbtn">LOAD</button>' +
+      '<input type="file" id="pr-file" accept=".json,.sfts2026" style="display:none">' +
+    '</div>' +
+    '<div class="pr-synth" id="pr-synth">' +
+      '<div class="pr-synthhead"><span>SOUND DESIGN &middot; <b id="ps-name">Default</b></span><button class="pr-btn" id="ps-reset">RESET VOICE</button></div>' +
+      '<div class="pr-sgrid">' +
+        '<div class="pr-sgroup">OSCILLATOR / PITCH</div>' +
+        psCtl("ps-morph", "MORPH A&rarr;B", 'min="0" max="1" step="0.01"') +
+        psSel("ps-oct", "OCTAVE", '<option value="0.25">-2 oct</option><option value="0.5">-1 oct</option><option value="1">0</option><option value="2">+1 oct</option><option value="4">+2 oct</option>') +
+        '<div class="pr-sgroup">FILTER</div>' +
+        psSel("ps-ftype", "TYPE", '<option value="lowpass">Low-pass</option><option value="highpass">High-pass</option><option value="bandpass">Band-pass</option>') +
+        psCtl("ps-cut", "CUTOFF", 'min="0" max="1000" step="1"') +
+        psCtl("ps-res", "RESONANCE", 'min="0" max="20" step="0.5"') +
+        psCtl("ps-env", "ENV &rarr; CUTOFF", 'min="0" max="6000" step="50"') +
+        '<div class="pr-sgroup">AMP ENVELOPE</div>' +
+        psCtl("ps-a", "ATTACK", 'min="0" max="1.5" step="0.005"') +
+        psCtl("ps-d", "DECAY", 'min="0" max="2" step="0.01"') +
+        psCtl("ps-s", "SUSTAIN", 'min="0" max="1" step="0.01"') +
+        psCtl("ps-r", "RELEASE", 'min="0" max="3" step="0.01"') +
+        '<div class="pr-sgroup">SHAPE</div>' +
+        psCtl("ps-drive", "DRIVE", 'min="0" max="1" step="0.01"') +
+        psCtl("ps-fold", "WAVEFOLD", 'min="0" max="1" step="0.01"') +
+      '</div>' +
+    '</div>' +
+    '<div class="pr-scroll"><canvas class="pr-canvas" id="pr-canvas"></canvas></div>' +
+    '<div class="pr-ports">' +
+      '<div class="pr-caph">NODE CONNECTIONS &middot; matrix <span style="opacity:.5">wired at the hub</span></div>' +
+      '<div class="pr-portrow"><span class="pr-port inp"></span><span class="pr-porttag">IN &middot; VOICE</span><span class="pr-portlbl">&larr; Warp Lab / Wave Sequencer patch</span></div>' +
+      '<div class="pr-portrow"><span class="pr-port"></span><span class="pr-porttag">OUT &middot; AUDIO</span><span class="pr-portlbl">&rarr; Arrangement / Reactive Visuals (baked)</span></div>' +
+      '<div class="pr-portrow"><span class="pr-port"></span><span class="pr-porttag">OUT &middot; NOTES</span><span class="pr-portlbl">&rarr; Arrangement / drive other modules</span></div>' +
+      '<div class="pr-portrow"><span class="pr-port future"></span><span class="pr-porttag">IN &middot; MIDI</span><span class="pr-portlbl" style="opacity:.5">external MIDI / host (coming)</span></div>' +
+    '</div>' +
+    '<div class="pr-note">Drag on empty grid to draw a note (drag sets length). Drag a note body to move, drag its right edge to resize. Double-click or right-click a note to delete. Load any Warp / Wave Sequencer sound as the voice, or use the built-in default. Notes play the live wavetable voice; freezing to a buffer for the Arrangement comes with that integration.</div>' +
+    '</div>';
+  }
+
+  function psCtl(id, label, attrs) {
+    return '<div class="pr-ctl"><label>' + label + ' <span class="v" id="' + id + 'v">0</span></label><input type="range" id="' + id + '" ' + attrs + '></div>';
+  }
+  function psSel(id, label, opts) {
+    return '<div class="pr-ctl"><label>' + label + '</label><select id="' + id + '">' + opts + '</select></div>';
+  }
+
+  function wireUI(pane) {
+    paneRef = pane; cv = pane.querySelector("#pr-canvas"); cctx = cv.getContext("2d");
+    refreshControls(); sizeCanvas(); redraw(); wireCanvas(); wireSynth(pane);
+    pane.querySelector("#pr-soundbtn").addEventListener("click", function (e) { var sp = pane.querySelector("#pr-synth"); var open = sp.classList.toggle("open"); e.target.innerHTML = "SOUND " + (open ? "&#9652;" : "&#9662;"); if (open) refreshSynthPanel(); });
+    pane.querySelector("#pr-play").addEventListener("click", startPlay);
+    pane.querySelector("#pr-stop").addEventListener("click", stopPlay);
+    pane.querySelector("#pr-bpm").addEventListener("change", function (e) { var v = parseFloat(e.target.value); if (v > 0) { roll.bpm = v; persist(); } });
+    pane.querySelector("#pr-loop").addEventListener("click", function (e) { roll.loop = !roll.loop; e.target.classList.toggle("on", roll.loop); persist(); });
+    pane.querySelector("#pr-flow").addEventListener("click", function (e) { scrollPlay = !scrollPlay; e.target.classList.toggle("on", scrollPlay); sizeCanvas(); var cc = cv && cv.parentElement; if (cc && !scrollPlay && !playing) cc.scrollLeft = 0; redraw(); });
+    pane.querySelector("#pr-bars").addEventListener("change", function (e) { roll.lengthBeats = (parseInt(e.target.value, 10) || 4) * 4; sizeCanvas(); redraw(); persist(); });
+    pane.querySelector("#pr-snap").addEventListener("change", function (e) { roll.snap = parseFloat(e.target.value) || 0.25; redraw(); persist(); });
+    var vb = pane.querySelector("#pr-voicebtn"), vp = pane.querySelector("#pr-voice");
+    vb.addEventListener("click", function (e) { e.stopPropagation(); var open = vp.classList.toggle("open"); if (open) buildVoiceList(); });
+    document.addEventListener("click", function (e) { if (vp.classList.contains("open") && !vp.contains(e.target) && !vb.contains(e.target)) vp.classList.remove("open"); });
+    pane.querySelector("#pr-delsel").addEventListener("click", function () { if (selId) removeNote(selId); });
+    pane.querySelector("#pr-clear").addEventListener("click", function () { stopPlay(); roll.notes = []; selId = null; persist(); redraw(); });
+    pane.querySelector("#pr-copy").addEventListener("click", function (e) { try { navigator.clipboard.writeText(JSON.stringify(getState())); e.target.textContent = "COPIED"; setTimeout(function () { e.target.textContent = "COPY"; }, 900); } catch (er) {} });
+    pane.querySelector("#pr-dl").addEventListener("click", function () { var blob = new Blob([JSON.stringify(getState(), null, 2)], { type: "application/json" }); var url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = "piano-roll.sfts2026.json"; a.click(); setTimeout(function () { URL.revokeObjectURL(url); }, 1000); });
+    var fileIn = pane.querySelector("#pr-file");
+    pane.querySelector("#pr-loadbtn").addEventListener("click", function () { fileIn.click(); });
+    fileIn.addEventListener("change", function (e) { var f = e.target.files[0]; if (!f) return; var r = new FileReader(); r.onload = function () { try { loadState(JSON.parse(r.result)); } catch (err) { showErr("Load failed: " + err.message); } }; r.readAsText(f); fileIn.value = ""; });
+    pane.querySelector("#pr-zoomin").addEventListener("click", function () { zoom = Math.min(2.5, zoom * 1.25); sizeCanvas(); redraw(); });
+    pane.querySelector("#pr-zoomout").addEventListener("click", function () { zoom = Math.max(0.6, zoom / 1.25); sizeCanvas(); redraw(); });
+    pane.querySelector("#pr-erase").addEventListener("click", function (e) { eraseMode = !eraseMode; e.target.classList.toggle("on", eraseMode); });
+    pane.querySelector("#pr-chord").addEventListener("click", function (e) { chordMode = chordMode === "off" ? "maj" : chordMode === "maj" ? "min" : "off"; e.target.textContent = "CHORD: " + chordMode.toUpperCase(); e.target.classList.toggle("on", chordMode !== "off"); });
+    var prCont = cv && cv.parentElement; if (prCont) prCont.addEventListener("scroll", function () { if (!playing) redraw(); });
+    window.addEventListener("resize", function () { sizeCanvas(); if (!playing) redraw(); });
+  }
+
+  /* ---------------- API + BOOT ---------------- */
+  var api = {
+    mount: function (el) { if (!el) return; el.innerHTML = paneHTML(); wireUI(el); restore(); },
+    play: startPlay, stop: stopPlay,
+    getState: getState, loadState: loadState,
+    setVoice: function (patch, name) { chooseVoice(patch || null, name || (patch ? "patch" : "Default")); },
+    getContext: function () { ensureResume(); return ctx; },
+    getOutput: function () { ensureResume(); return master; },
+    getInput: function () { return null; },
+    sleep: function () { if (rafId) { cancelAnimationFrame(rafId); rafId = null; } },
+    wake: function () { if (playing && !rafId) rafId = requestAnimationFrame(drawLoop); }
+  };
+  window.PianoRoll = api;
+
+  function boot() {
+    try {
+      var aBtn = document.querySelector(".tab-btn");
+      var aPane = document.querySelector(".tab-pane") || document.querySelector(".tab-content");
+      var hosted = !!(aBtn && aPane);
+      if (hosted) {
+        var paneClass = aPane.classList.contains("tab-content") ? "tab-content" : "tab-pane";
+        var navEl = aBtn.parentElement, paneHost = aPane.parentElement;
+        var btn = document.createElement("button"); btn.className = "tab-btn"; btn.textContent = "Piano Roll";
+        var pane = document.createElement("div"); pane.className = paneClass; pane.id = "pr-host"; pane.style.display = "none";
+        var inner = document.createElement("div"); inner.id = "pr-pane"; pane.appendChild(inner);
+        navEl.appendChild(btn); paneHost.appendChild(pane);
+        btn.addEventListener("click", function () { if (typeof switchTab === "function") { try { switchTab(); } catch (e) {} } });
+        api.mount(inner);
+      } else {
+        var host = document.createElement("div"); host.id = "pr-pane"; document.body.appendChild(host);
+        api.mount(host);
+      }
+    } catch (e) {
+      var bar = document.createElement("div");
+      bar.style.cssText = "margin:10px;padding:10px 12px;border-radius:10px;background:#2a0d11;border:1px solid #ff5b6c;color:#ffb3bb;font:12px ui-monospace,monospace;white-space:pre-wrap";
+      bar.textContent = "[Piano Roll] boot error: " + (e && e.message ? e.message : e);
+      document.body.appendChild(bar);
+    }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+</script>
+</body>
+</html>
