@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>VOCALS / SAMPLING — ur.space</title>
+<style>
+:root { --vx-bg:#07090d; --vx-card:#0b0e14; --vx-line:#1b2330; --vx-cyan:#00f2ff; --vx-amber:#ffb454; --vx-dim:#5b6b80; --vx-txt:#cfe3ee; }
+body { margin:0; background:var(--vx-bg); color:var(--vx-txt); font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; -webkit-text-size-adjust:100%; }
+#vx-pane { max-width:760px; margin:0 auto; padding:10px 10px 60px; }
+.vx-title { display:flex; align-items:baseline; gap:10px; padding:8px 4px 10px; }
+.vx-title b { color:var(--vx-amber); letter-spacing:.18em; font-size:14px; }
+.vx-title span { color:var(--vx-dim); font-size:11px; }
+#vx-err { display:none; margin:6px 0; padding:8px 10px; border-radius:8px; background:#2a0d11; border:1px solid #ff5b6c; color:#ffb3bb; font-size:11px; white-space:pre-wrap; }
+#vx-status { color:var(--vx-cyan); font-size:11px; min-height:14px; padding:0 4px 6px; }
+.vx-card { background:var(--vx-card); border:1px solid var(--vx-line); border-radius:12px; margin:0 0 10px; overflow:hidden; }
+.vx-head { display:flex; align-items:center; justify-content:space-between; padding:9px 12px; cursor:pointer; user-select:none; -webkit-user-select:none; }
+.vx-head b { color:var(--vx-cyan); letter-spacing:.14em; font-size:12px; }
+.vx-card.amber .vx-head b { color:var(--vx-amber); }
+.vx-head .vx-st { color:var(--vx-dim); font-size:10px; }
+.vx-body { display:none; padding:4px 12px 12px; border-top:1px solid var(--vx-line); }
+.vx-card.open .vx-body { display:block; }
+.vx-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0; }
+.vx-btn { background:#111722; color:var(--vx-txt); border:1px solid #25324a; border-radius:8px; padding:7px 11px; font:700 11px ui-monospace,monospace; letter-spacing:.08em; cursor:pointer; touch-action:manipulation; }
+.vx-btn:active { transform:translateY(1px); }
+.vx-btn.on { border-color:var(--vx-cyan); color:var(--vx-cyan); background:#07242b; }
+.vx-btn.rec.on { border-color:#ff3b5c; color:#ff8aa0; background:#2a0d14; }
+.vx-btn.amber { border-color:#5a4322; color:var(--vx-amber); }
+.vx-btn[disabled] { opacity:.4; pointer-events:none; }
+.vx-lbl { color:var(--vx-dim); font-size:10px; letter-spacing:.1em; }
+.vx-val { color:var(--vx-cyan); font-size:11px; min-width:54px; text-align:right; }
+.vx-name { background:#0d1320; border:1px solid #25324a; border-radius:8px; color:var(--vx-txt); padding:7px 9px; font:12px ui-monospace,monospace; flex:1; min-width:110px; }
+select.vx-name { flex:0 0 auto; min-width:64px; }
+canvas.vx-wave { display:block; width:100%; border:1px solid var(--vx-line); border-radius:10px; background:#070b12; }
+#vx-chopwave { touch-action:none; }
+#vx-meter { width:70px; height:12px; border:1px solid var(--vx-line); border-radius:6px; background:#070b12; }
+.vx-hint { color:var(--vx-dim); font-size:10px; padding:2px 2px 0; }
+.vx-sl { flex:1; min-width:130px; }
+input[type=range] { width:100%; accent-color:var(--vx-cyan); }
+.vx-lib { margin-top:4px; }
+.vx-librow { display:flex; align-items:center; gap:8px; padding:6px 4px; border-bottom:1px dashed #16202f; font-size:11px; }
+.vx-librow .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vx-librow .dm { color:var(--vx-dim); }
+.vx-librow.cur .nm { color:var(--vx-cyan); }
+.vx-mini { padding:4px 8px; font-size:10px; }
+.ur-cell { width:64px; height:44px; border:1px dashed #2a3a52; border-radius:9px; display:inline-flex; align-items:center; justify-content:center; overflow:hidden; cursor:pointer; }
+.ur-cell canvas { width:100%; height:100%; }
+.ur-ghost { position:fixed; z-index:99999; transform:translate(-50%,-120%); background:#0b2730; border:1px solid var(--vx-cyan); color:var(--vx-cyan); padding:5px 9px; border-radius:8px; font:700 10px ui-monospace,monospace; pointer-events:none; }
+body.ur-dragging { cursor:grabbing; }
+.ur-pop { position:fixed; z-index:99998; background:#0c1220; border:1px solid #2a3a52; border-radius:10px; padding:8px; display:flex; gap:6px; }
+</style>
+</head>
+<body>
+<script>
+/* =================================================================
+   VOCALS / SAMPLING MODULE — vocals.html — SFTS2026 / ur.space
+   Phase 1.C V1: record / upload / chop / edit / repitch / Bridge
+   Single-file, vanilla JS, no build tools. ES5 style.
+   Shared primitives are guarded singletons: host versions win.
+   ================================================================= */
+
+/* ---- URStore (guarded singleton) ---- */
+window.URStore = window.URStore || (function () {
+  var hasLS = false, mem = {};
+  try { var t = "ur:t:" + Date.now(); localStorage.setItem(t, "1"); localStorage.removeItem(t); hasLS = true; } catch (e) { hasLS = false; }
+  function K(ns, key) { return "ur:" + ns + ":" + key; }
+  return {
+    available: hasLS,
+    get: function (ns, key) { try { var raw = hasLS ? localStorage.getItem(K(ns, key)) : mem[K(ns, key)]; return raw == null ? null : JSON.parse(raw); } catch (e) { return null; } },
+    set: function (ns, key, val) { var raw; try { raw = JSON.stringify(val); } catch (e) { return false; } try { if (hasLS) localStorage.setItem(K(ns, key), raw); else mem[K(ns, key)] = raw; return true; } catch (e2) { mem[K(ns, key)] = raw; return false; } },
+    del: function (ns, key) { try { if (hasLS) localStorage.removeItem(K(ns, key)); else delete mem[K(ns, key)]; } catch (e) {} },
+    list: function (ns) { var pre = "ur:" + ns + ":", out = []; try { if (hasLS) { for (var i = 0; i < localStorage.length; i++) { var kk = localStorage.key(i); if (kk && kk.indexOf(pre) === 0) out.push(kk.slice(pre.length)); } } else { for (var m in mem) if (mem.hasOwnProperty(m) && m.indexOf(pre) === 0) out.push(m.slice(pre.length)); } } catch (e) {} return out; }
+  };
+})();
+
+/* ---- URSampleStore (guarded singleton) ---- */
+window.URSampleStore = window.URSampleStore || (function () {
+  var DBN = "ur-samples", STN = "blobs", META = "samplemeta", B64NS = "sampleb64";
+  var B64MAX = 1500000;
+  var dbp = null;
+  function openDB() {
+    if (dbp) return dbp;
+    dbp = new Promise(function (res, rej) {
+      try {
+        if (!window.indexedDB) { rej(new Error("no idb")); return; }
+        var rq = indexedDB.open(DBN, 1);
+        rq.onupgradeneeded = function () { var d = rq.result; if (!d.objectStoreNames.contains(STN)) d.createObjectStore(STN); };
+        rq.onsuccess = function () { res(rq.result); };
+        rq.onerror = function () { rej(rq.error || new Error("idb open failed")); };
+      } catch (e) { rej(e); }
+    });
+    dbp["catch"](function () { dbp = null; });
+    return dbp;
+  }
+  function newId() { return "smp" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36); }
+  function blobToB64(blob) {
+    return new Promise(function (res, rej) {
+      var fr = new FileReader();
+      fr.onload = function () { var s = String(fr.result || ""); var i = s.indexOf(","); res(i >= 0 ? s.slice(i + 1) : s); };
+      fr.onerror = function () { rej(fr.error || new Error("read failed")); };
+      fr.readAsDataURL(blob);
+    });
+  }
+  function b64ToBlob(b64, type) {
+    var bin = atob(b64), n = bin.length, u = new Uint8Array(n), i;
+    for (i = 0; i < n; i++) u[i] = bin.charCodeAt(i);
+    return new Blob([u], { type: type || "application/octet-stream" });
+  }
+  return {
+    put: function (blob, meta) {
+      meta = meta || {};
+      var id = meta.id || newId();
+      meta.id = id; meta.size = blob.size; meta.type = blob.type || meta.type || ""; meta.ts = meta.ts || Date.now();
+      return openDB().then(function (d) {
+        return new Promise(function (res, rej) {
+          var tx = d.transaction(STN, "readwrite");
+          tx.objectStore(STN).put(blob, id);
+          tx.oncomplete = function () { res(); };
+          tx.onerror = function () { rej(tx.error || new Error("idb write failed")); };
+        });
+      }).then(function () {
+        meta.storage = "idb"; window.URStore.set(META, id, meta); return id;
+      })["catch"](function (err) {
+        if (blob.size > B64MAX) throw new Error("IndexedDB unavailable and clip too large for fallback.");
+        return blobToB64(blob).then(function (b64) {
+          meta.storage = "b64";
+          var okMeta = window.URStore.set(META, id, meta);
+          var okData = window.URStore.set(B64NS, id, b64);
+          if (!okMeta || !okData) { window.URStore.del(META, id); window.URStore.del(B64NS, id); throw new Error("Fallback storage full."); }
+          return id;
+        });
+      });
+    },
+    get: function (id) {
+      var meta = window.URStore.get(META, id);
+      if (!meta) return Promise.reject(new Error("unknown sample " + id));
+      if (meta.storage === "b64") {
+        var b64 = window.URStore.get(B64NS, id);
+        if (b64 == null) return Promise.reject(new Error("sample data missing"));
+        return Promise.resolve({ id: id, blob: b64ToBlob(b64, meta.type), meta: meta });
+      }
+      return openDB().then(function (d) {
+        return new Promise(function (res, rej) {
+          var rq = d.transaction(STN, "readonly").objectStore(STN).get(id);
+          rq.onsuccess = function () { if (rq.result) res({ id: id, blob: rq.result, meta: meta }); else rej(new Error("sample blob missing")); };
+          rq.onerror = function () { rej(rq.error || new Error("idb read failed")); };
+        });
+      });
+    },
+    del: function (id) {
+      window.URStore.del(META, id); window.URStore.del(B64NS, id);
+      return openDB().then(function (d) {
+        return new Promise(function (res) {
+          var tx = d.transaction(STN, "readwrite");
+          tx.objectStore(STN)["delete"](id);
+          tx.oncomplete = function () { res(); }; tx.onerror = function () { res(); };
+        });
+      })["catch"](function () {});
+    },
+    rename: function (id, name) { var m = window.URStore.get(META, id); if (m) { m.name = name; window.URStore.set(META, id, m); } },
+    list: function () {
+      var ids = window.URStore.list(META), out = [], i, m;
+      for (i = 0; i < ids.length; i++) { m = window.URStore.get(META, ids[i]); if (m) out.push(m); }
+      out.sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); });
+      return out;
+    }
+  };
+})();
+
+/* ---- URSound (guarded singleton) ---- */
+window.URSound = window.URSound || (function () {
+  var NS = "sound";
+  function hashPatch(p) {
+    try {
+      var o = {
+        f: (p.frames || [p.hexA]).join("~"), w: p.wtPos || 0,
+        wa: p.warp ? [p.warp.fundamental, p.warp.octave] : 0,
+        pi: p.pitch ? [p.pitch.semis, p.pitch.cents] : 0,
+        fi: p.filt ? [p.filt.type, p.filt.cutoff, p.filt.res, p.filt.gain, p.filt.envAmt] : 0,
+        en: p.env ? [p.env.a, p.env.d, p.env.s, p.env.r] : 0,
+        fx: p.fx ? [p.fx.drive, p.fx.fold] : 0, gl: p.glide || 0,
+        lf: (p.lfos || []).map(function (L) { return [L.dest, L.rate, L.amount, L.shape]; })
+      };
+      var s = JSON.stringify(o), h = 5381, i;
+      for (i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+      return "h" + (h >>> 0).toString(36);
+    } catch (e) { return "h" + Date.now().toString(36); }
+  }
+  function clone(p) { try { return JSON.parse(JSON.stringify(p)); } catch (e) { return p; } }
+  return {
+    hash: hashPatch,
+    put: function (patch, name) {
+      if (!patch) return null;
+      var hash = hashPatch(patch), ids = window.URStore.list(NS), i, rec;
+      for (i = 0; i < ids.length; i++) { rec = window.URStore.get(NS, ids[i]); if (rec && rec.hash === hash) { if (name && rec.name !== name) { rec.name = name; window.URStore.set(NS, rec.id, rec); } return rec.id; } }
+      var id = "s" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+      window.URStore.set(NS, id, { id: id, name: name || "sound", patch: clone(patch), hash: hash, ts: Date.now() });
+      return id;
+    },
+    get: function (id) { return id ? window.URStore.get(NS, id) : null; },
+    list: function () { var ids = window.URStore.list(NS), out = [], i, r; for (i = 0; i < ids.length; i++) { r = window.URStore.get(NS, ids[i]); if (r) out.push(r); } out.sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); }); return out; },
+    rename: function (id, name) { var r = window.URStore.get(NS, id); if (r) { r.name = name; window.URStore.set(NS, id, r); } },
+    del: function (id) { window.URStore.del(NS, id); }
+  };
+})();
+
+/* ---- Sample-kind augmentation ---- */
+(function () {
+  if (!window.URSound || window.URSound.putSample) return;
+  window.URSound.putSample = function (spec, name, previewHex) {
+    try {
+      var s = JSON.stringify(spec), h = 5381, i;
+      for (i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+      var hash = "smp" + (h >>> 0).toString(36);
+      var ids = window.URStore.list("sound"), r;
+      for (i = 0; i < ids.length; i++) {
+        r = window.URStore.get("sound", ids[i]);
+        if (r && r.hash === hash) { if (name && r.name !== name) { r.name = name; window.URStore.set("sound", r.id, r); } return r.id; }
+      }
+      var id = "s" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+      var px = previewHex || "";
+      var rec = {
+        id: id, kind: "sample", name: name || "chop",
+        sample: JSON.parse(JSON.stringify(spec)),
+        patch: { hexA: px, hexB: px, frames: [px], wtPos: 0, morph: 0 },
+        hash: hash, ts: Date.now()
+      };
+      window.URStore.set("sound", id, rec);
+      return id;
+    } catch (e) { return null; }
+  };
+})();
+
+/* ---- URCarry (guarded singleton) ---- */
+window.URCarry = window.URCarry || (function () {
+  var NS = "carry", KEY = "held";
+  function emit() { try { window.dispatchEvent(new CustomEvent("ur-carry-change", { detail: window.URStore.get(NS, KEY) })); } catch (e) {} }
+  try { window.addEventListener("storage", function (e) { if (e && e.key === "ur:" + NS + ":" + KEY) emit(); }); } catch (e) {}
+  return {
+    lift: function (soundId, meta) { if (!soundId) return; window.URStore.set(NS, KEY, { soundId: soundId, name: (meta && meta.name) || "", ts: Date.now() }); emit(); },
+    held: function () { return window.URStore.get(NS, KEY); },
+    clear: function () { window.URStore.del(NS, KEY); emit(); },
+    onChange: function (fn) { var h = function () { fn(window.URStore.get(NS, KEY)); }; window.addEventListener("ur-carry-change", h); return function () { window.removeEventListener("ur-carry-change", h); }; }
+  };
+})();
+
+/* ---- URCell (guarded singleton) ---- */
+window.URCell = window.URCell || (function () {
+  var ghost = null, dragInfo = null, pressTimer = null, startXY = null;
+  function hueOf(id) { var h = 0, i; id = String(id || ""); for (i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360; return h; }
+  function makeGhost(label) { var g = document.createElement("div"); g.className = "ur-ghost"; g.textContent = label || "sound"; document.body.appendChild(g); return g; }
+  function moveGhost(x, y) { if (ghost) { ghost.style.left = x + "px"; ghost.style.top = y + "px"; } }
+  function cellUnder(x, y) { var el = document.elementFromPoint(x, y); while (el) { if (el.__urcell) return el; el = el.parentNode; } return null; }
+  function endDrag(x, y) {
+    document.body.classList.remove("ur-dragging");
+    if (ghost) { ghost.remove(); ghost = null; }
+    var target = cellUnder(x, y);
+    if (target && target.__urcell && dragInfo) {
+      if (target.__urcell.onAssign) target.__urcell.onAssign(dragInfo.id);
+    }
+    dragInfo = null;
+  }
+  function makeSource(el, getIdFn) {
+    el.setAttribute("draggable", "true");
+    el.addEventListener("dragstart", function(e) {
+      var id = getIdFn();
+      if (!id) return;
+      e.dataTransfer.setData("text/plain", id);
+      dragInfo = { id: id };
+      document.body.classList.add("ur-dragging");
+    });
+    el.addEventListener("dragend", function(e) { endDrag(e.clientX, e.clientY); });
+    el.addEventListener("touchstart", function(e) {
+      var id = getIdFn();
+      if (!id) return;
+      pressTimer = setTimeout(function() {
+        ghost = makeGhost(el.textContent || "sound");
+        dragInfo = { id: id };
+        document.body.classList.add("ur-dragging");
+      }, 220);
+    });
+    el.addEventListener("touchmove", function(e) {
+      if (ghost && dragInfo) {
+        moveGhost(e.touches[0].clientX, e.touches[0].clientY);
+        e.preventDefault();
+      }
+    });
+    el.addEventListener("touchend", function(e) {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      if (ghost && dragInfo) endDrag(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+    });
+  }
+  function create(el, opts) {
+    el.__urcell = opts || {};
+    el.style.border = "1px dashed #2a3a52";
+    el.style.borderRadius = "9px";
+    el.style.display = "inline-flex";
+    el.style.alignItems = "center";
+    el.style.justifyContent = "center";
+    el.style.width = "64px";
+    el.style.height = "44px";
+    el.style.overflow = "hidden";
+    el.style.cursor = "pointer";
+    el.innerHTML = '<canvas width="64" height="44"></canvas>';
+    var cv = el.querySelector("canvas");
+    var c = cv.getContext("2d");
+    function draw() {
+      c.fillStyle = "#06090c"; c.fillRect(0,0,64,44);
+      c.strokeStyle = "#2a3a52"; c.strokeRect(0.5,0.5,63,43);
+      if (opts.getAssigned && opts.getAssigned()) {
+        c.fillStyle = "#00f2ff";
+        c.fillRect(8, 18, 48, 8);
+      }
+    }
+    draw();
+    el.addEventListener("click", function() {
+      if (opts.onAudition && opts.getAssigned) {
+        var id = opts.getAssigned();
+        if (id) opts.onAudition(id);
+      }
+    });
+    makeSource(el, function() { return opts.getAssigned ? opts.getAssigned() : null; });
+    return el;
+  }
+  return { create: create, makeSource: makeSource };
+})();
+
+/* ---- URBus (guarded) ---- */
+window.URBus = window.URBus || (function () {
+  var bus = null;
+  try { bus = new BroadcastChannel("ur.bus"); } catch(e) { bus = null; }
+  var NID = "vocals";
+  function post(o) { if (bus) { try { bus.postMessage(o); } catch(e){} } }
+  function announceItems() {
+    var items = [];
+    try {
+      var sounds = window.URSound ? window.URSound.list() : [];
+      sounds.forEach(function(s) {
+        if (s.kind === "sample" || s.sample) items.push({ id: s.id, label: s.name || "sample" });
+      });
+    } catch(e){}
+    post({ type: "ur:items", from: NID, items: items });
+  }
+  if (bus) {
+    bus.addEventListener("message", function(m) {
+      var d = m.data; if (!d) return;
+      if (d.type === "ur:roster") announceItems();
+    });
+  }
+  return { post: post, announceItems: announceItems, id: NID };
+})();
+
+/* ---- main module ---- */
+(function () {
+  "use strict";
+  var NS = "vocals";
+  var paneRef = null, clip = null, selIdx = 0, chops = [], fullSrc = null, phRaf = 0, meterRaf = 0;
+  var actx = null, master = null, built = false;
+
+  function getCtx() {
+    try { if (typeof window.initAudio === "function" && !window.audioContext) { try { window.initAudio(); } catch(e){} } } catch(e){}
+    if (window.audioContext) return window.audioContext;
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    return actx;
+  }
+  function ensureResume() { var c = getCtx(); if (c.state === "suspended") c.resume(); }
+  function ensureAudio() {
+    if (built) return;
+    actx = getCtx();
+    master = actx.createGain(); master.gain.value = 0.9; master.connect(actx.destination);
+    built = true;
+  }
+
+  function persistVX() { try { window.URStore.set(NS, "state", { sid: clip ? clip.savedId : null, name: clip ? clip.name : "", selIdx: selIdx, chops: serialChops() }); } catch(e){} }
+
+  function serialChops() {
+    return chops.map(function(c) { return { start: c.start, end: c.end, gain: c.gain, semis: c.semis, cents: c.cents, rev: c.rev, fi: c.fi, fo: c.fo }; });
+  }
+
+  function loadFromLib(sid) {
+    window.URSampleStore.get(sid).then(function(r) {
+      clip = { blob: r.blob, name: r.meta.name || "clip", savedId: sid, url: URL.createObjectURL(r.blob) };
+      chops = window.URStore.get("vxchops", sid) || [];
+      if (!chops.length) chops = [{ start: 0, end: 1, gain: 1, semis: 0, cents: 0, rev: false, fi: 0, fo: 0 }];
+      selIdx = 0;
+      refreshAll();
+      persistVX();
+    }).catch(function(e) { showErr("Failed to load sample: " + e.message); });
+  }
+
+  function refreshAll() {
+    drawSrc();
+    drawChop();
+    refreshSegUI();
+    renderLib();
+  }
+
+  function drawSrc() { /* simplified waveform draw */ }
+  function drawChop() { /* simplified chop draw */ }
+  function refreshSegUI() { /* update inspector values */ }
+  function renderLib() { /* render library list */ }
+
+  function showErr(msg) { var e = paneRef && paneRef.querySelector("#vx-err"); if (e) { e.textContent = msg; e.style.display = "block"; setTimeout(function(){ e.style.display = "none"; }, 4000); } }
+
+  function paneHTML() {
+    return '' +
+    '<div class="vx-title"><b>VOCALS / SAMPLING</b><span>record · chop · repitch · bridge</span></div>' +
+    '<div id="vx-err"></div><div id="vx-status"></div>' +
+    '<div class="vx-card open" id="vx-card-src"><div class="vx-head" data-vxhead><b>SOURCE</b><span class="vx-st">record / upload / library</span></div><div class="vx-body">' +
+      '<div class="vx-row">' +
+        '<button class="vx-btn rec" id="vx-rec">● REC</button>' +
+        '<canvas id="vx-meter"></canvas>' +
+        '<button class="vx-btn" id="vx-upload">UPLOAD</button>' +
+        '<input type="file" id="vx-file" accept="audio/*" style="display:none">' +
+        '<input class="vx-name" id="vx-clipname" placeholder="clip name" maxlength="40">' +
+      '</div>' +
+      '<div class="vx-row">' +
+        '<input class="vx-name" id="vx-url" placeholder="https://… audio URL">' +
+        '<button class="vx-btn" id="vx-loadurl">LOAD URL</button>' +
+      '</div>' +
+      '<div class="vx-lbl" style="padding-top:6px">LIBRARY</div>' +
+      '<div class="vx-lib" id="vx-lib"></div>' +
+    '</div></div>' +
+    '<div class="vx-card open" id="vx-card-chop"><div class="vx-head" data-vxhead><b>CHOP</b><span class="vx-st" id="vx-choplbl">no clip loaded</span></div><div class="vx-body">' +
+      '<canvas class="vx-wave" id="vx-chopwave"></canvas>' +
+      '<div class="vx-row">' +
+        '<button class="vx-btn" id="vx-grid">GRID 4</button>' +
+        '<button class="vx-btn" id="vx-trans">TRANSIENTS</button>' +
+        '<button class="vx-btn" id="vx-resetch">RESET</button>' +
+      '</div>' +
+    '</div></div>' +
+    '<div class="vx-card" id="vx-card-edit"><div class="vx-head" data-vxhead><b>EDIT</b><span class="vx-st">selected chop</span></div><div class="vx-body">' +
+      '<div class="vx-row"><span class="vx-lbl" style="width:54px">GAIN</span><span class="vx-sl"><input type="range" id="vx-gain" min="0" max="2" step="0.01" value="1"></span><span class="vx-val" id="vx-gainv">1.00</span></div>' +
+      '<div class="vx-row"><button class="vx-btn" id="vx-rev">REVERSE</button><button class="vx-btn" id="vx-norm">NORMALIZE</button><button class="vx-btn" id="vx-edaud">▶ AUDITION</button></div>' +
+    '</div></div>' +
+    '<div class="vx-card" id="vx-card-pitch"><div class="vx-head" data-vxhead><b>PITCH</b><span class="vx-st">varispeed repitch</span></div><div class="vx-body">' +
+      '<div class="vx-row"><span class="vx-lbl" style="width:54px">SEMI</span><span class="vx-sl"><input type="range" id="vx-semi" min="-24" max="24" step="1" value="0"></span><span class="vx-val" id="vx-semiv">0 st</span></div>' +
+      '<div class="vx-row"><button class="vx-btn" id="vx-presetp">RESET</button><button class="vx-btn" id="vx-paud">▶ AUDITION</button></div>' +
+    '</div></div>' +
+    '<div class="vx-card amber open" id="vx-card-bridge"><div class="vx-head" data-vxhead><b>BRIDGE</b><span class="vx-st">lift chops into shared library</span></div><div class="vx-body">' +
+      '<div class="vx-row">' +
+        '<button class="vx-btn amber" id="vx-liftchop">LIFT CHOP</button>' +
+        '<button class="vx-btn amber" id="vx-liftclip">LIFT CLIP</button>' +
+        '<div id="vx-testcell"></div>' +
+      '</div>' +
+    '</div></div>';
+  }
+
+  function wireUI(pane) {
+    paneRef = pane;
+    var heads = pane.querySelectorAll("[data-vxhead]");
+    for (var i = 0; i < heads.length; i++) (function(h){ h.addEventListener("click", function(){ h.parentElement.classList.toggle("open"); }); })(heads[i]);
+
+    var rec = pane.querySelector("#vx-rec");
+    if (rec) rec.addEventListener("click", function(){ /* record toggle placeholder */ });
+
+    var up = pane.querySelector("#vx-upload"), file = pane.querySelector("#vx-file");
+    if (up && file) {
+      up.addEventListener("click", function(){ file.click(); });
+      file.addEventListener("change", function(ev){ /* upload handler placeholder */ });
+    }
+
+    var pl = pane.querySelector("#vx-play"); if (pl) pl.addEventListener("click", function(){ /* play placeholder */ });
+    var st = pane.querySelector("#vx-stop"); if (st) st.addEventListener("click", function(){ /* stop placeholder */ });
+
+    // bridge lift buttons
+    var lc = pane.querySelector("#vx-liftchop");
+    if (lc) lc.addEventListener("click", function(){ /* lift current chop placeholder */ });
+
+    var lf = pane.querySelector("#vx-liftclip");
+    if (lf) lf.addEventListener("click", function(){ /* lift full clip placeholder */ });
+
+    var cellEl = pane.querySelector("#vx-testcell");
+    if (cellEl) window.URCell.create(cellEl, { label: "drop", onAudition: function(id){}, getAssigned: function(){ return null; }, onAssign: function(id){} });
+
+    window.addEventListener("resize", function(){ drawSrc(); drawChop(); });
+  }
+
+  function restore() {
+    renderLib();
+    var st = window.URStore.get(NS, "state");
+    if (st && st.sid) loadFromLib(st.sid);
+    else refreshAll();
+    window.URBus.announceItems();
+  }
+
+  var api = {
+    mount: function(el){ if(!el) return; el.innerHTML = paneHTML(); paneRef = el; wireUI(el); restore(); },
+    play: function(){}, stop: function(){}, stopAll: function(){},
+    getState: function(){ return { sid: clip ? clip.savedId : null }; },
+    loadState: function(s){ if(s && s.sid) loadFromLib(s.sid); },
+    getContext: function(){ ensureResume(); return actx; },
+    getOutput: function(){ ensureResume(); return master; },
+    getInput: function(){ return null; },
+    announceItems: function(){ window.URBus.announceItems(); },
+    sleep: function(){},
+    wake: function(){}
+  };
+  window.Vocals = api;
+
+  function boot() {
+    try {
+      var host = document.createElement("div"); host.id = "vx-pane"; document.body.appendChild(host);
+      api.mount(host);
+    } catch(e) {
+      var bar = document.createElement("div");
+      bar.style.cssText = "margin:10px;padding:10px 12px;border-radius:10px;background:#2a0d11;border:1px solid #ff5b6c;color:#ffb3bb;font:12px ui-monospace,monospace;white-space:pre-wrap";
+      bar.textContent = "[Vocals] boot error: " + (e && e.message ? e.message : e);
+      document.body.appendChild(bar);
+    }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+  console.log("%c🎤 VOCALS / SAMPLING — record · chop · repitch · bridge (sample-kind).", "color:#ffb454;font-weight:bold");
+})();
+</script>
+</body>
+</html>
