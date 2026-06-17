@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Wave Sequencer &middot; URSPACE / SFTS2026</title>
+<style>
+  html, body { margin: 0; background: #05080b; color: #cfe9ec; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  #ws-pane { max-width: 960px; margin: 0 auto; padding: 18px 16px 60px; }
+  #ws-pane * { box-sizing: border-box; }
+  #ws-pane .ws-err { display: none; margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: #2a0d11; border: 1px solid #ff5b6c; color: #ffb3bb; font-size: 12px; white-space: pre-wrap; }
+  #ws-pane .ws-card { background: rgba(10,12,16,.72); border: 1px solid rgba(0,242,255,.35); border-radius: 22px; padding: 18px; box-shadow: inset 0 0 60px rgba(0,242,255,.04); }
+  #ws-pane .ws-h { font: 700 11px/1 ui-monospace, monospace; letter-spacing: .22em; text-transform: uppercase; color: #5b6b70; }
+  #ws-pane .ws-title { font: 800 20px/1 ui-monospace, monospace; letter-spacing: .04em; color: #e6f7fa; margin: 2px 0 14px; }
+  #ws-pane .ws-title small { display: block; font: 700 9px/1.4 ui-monospace, monospace; letter-spacing: .2em; color: #46585e; margin-top: 6px; }
+  #ws-pane .ws-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; }
+  #ws-pane .ws-btn { font: 700 11px/1 ui-monospace, monospace; padding: 9px 13px; border-radius: 10px; cursor: pointer;
+    background: rgba(0,242,255,.08); border: 1px solid rgba(0,242,255,.32); color: #bdeef4; user-select: none; }
+  #ws-pane .ws-btn:hover { background: rgba(0,242,255,.16); }
+  #ws-pane .ws-btn.on { background: #00f2ff; color: #04222a; border-color: #00f2ff; }
+  #ws-pane .ws-btn.warn { border-color: #ff5b6c55; color: #ff8a97; background: transparent; }
+  #ws-pane .ws-label { font: 700 9px/1 ui-monospace, monospace; letter-spacing: .14em; color: #5b6b70; }
+  #ws-pane .ws-val { font: 700 11px/1 ui-monospace, monospace; color: #e6f7fa; }
+  #ws-pane .ws-num { width: 64px; background: #0b0f14; border: 1px solid #22303a; border-radius: 8px; color: #e6f7fa; padding: 6px 8px; font: 700 11px/1 ui-monospace, monospace; }
+  #ws-pane select.ws-sel { background: #0b0f14; border: 1px solid #22303a; border-radius: 8px; color: #e6f7fa; padding: 6px 8px; font: 700 10px/1 ui-monospace, monospace; }
+  #ws-pane .ws-strip { display: flex; gap: 10px; overflow-x: auto; padding: 6px 2px 12px; min-height: 150px; }
+  #ws-pane .ws-chunk { flex: 0 0 auto; width: 150px; background: #0b0f14; border: 1px solid #1c2730; border-radius: 14px; padding: 9px; position: relative; }
+  #ws-pane .ws-chunk.playing { border-color: #00f2ff; box-shadow: 0 0 14px rgba(0,242,255,.35); }
+  #ws-pane .ws-seams { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
+  #ws-pane .ws-seamhdr { font: 700 10px/1 ui-monospace, monospace; color: #5b6b70; letter-spacing: .08em; margin-bottom: 2px; }
+  #ws-pane .ws-seam { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; background: #0a0f14; border: 1px solid #16202a; border-radius: 9px; font-size: 10px; }
+  #ws-pane .ws-seamlbl { font-family: ui-monospace, monospace; color: #7fe9ff; min-width: 84px; }
+  #ws-pane .ws-seamadv { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  #ws-pane .ws-seam .ws-rng { width: 66px; }
+  #ws-pane .ws-chunk .nm { font: 700 10px/1.2 ui-monospace, monospace; color: #cfe9ec; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 6px; }
+  #ws-pane .ws-thumb { display: block; width: 100%; height: 54px; background: #06090c; border: 1px solid #16202a; border-radius: 8px; }
+  #ws-pane .ws-chunk .ctl { display: flex; align-items: center; gap: 4px; margin-top: 7px; }
+  #ws-pane .ws-chunk .ctl select { flex: 1; }
+  #ws-pane .ws-rng { width: 100%; margin-top: 7px; accent-color: #00f2ff; }
+  #ws-pane .ws-ic { font: 700 11px/1 ui-monospace, monospace; padding: 4px 6px; border-radius: 6px; cursor: pointer; background: transparent; border: 1px solid #2a3a44; color: #8aa0a6; }
+  #ws-pane .ws-ic:hover { color: #fff; border-color: #00f2ff; }
+  #ws-pane .ws-empty { font: 600 11px/1.5 ui-monospace, monospace; color: #566; padding: 30px 10px; text-align: center; width: 100%; }
+  #ws-pane .ws-capwrap { position: relative; display: inline-block; }
+  #ws-pane .ws-cap { position: absolute; z-index: 40; left: 0; top: calc(100% + 6px); width: 260px; max-height: 320px; overflow: auto;
+    background: #0b0f14; border: 1px solid rgba(0,242,255,.35); border-radius: 14px; padding: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.6); display: none; }
+  #ws-pane .ws-cap.open { display: block; }
+  #ws-pane .ws-caph { font: 800 9px/1 ui-monospace, monospace; letter-spacing: .18em; color: #5b6b70; margin: 2px 0 8px; }
+  #ws-pane .ws-pick { display: block; width: 100%; text-align: left; font: 700 10px/1.3 ui-monospace, monospace; padding: 7px 8px; margin-bottom: 4px;
+    background: rgba(0,242,255,.06); border: 1px solid #22303a; border-radius: 8px; color: #cfe9ec; cursor: pointer; }
+  #ws-pane .ws-pick:hover { border-color: #00f2ff; color: #fff; }
+  #ws-pane .ws-ports { margin-top: 16px; padding: 12px 14px; border: 1px dashed #2a3a44; border-radius: 14px; background: rgba(0,242,255,.03); }
+  #ws-pane .ws-portrow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid #141a1f; }
+  #ws-pane .ws-port { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto; border: 2px solid #00f2ff; box-shadow: 0 0 6px rgba(0,242,255,.5); }
+  #ws-pane .ws-port.inp { border-color: #ffb24d; box-shadow: 0 0 6px rgba(255,178,77,.5); }
+  #ws-pane .ws-port.future { border-color: #3a4a52; box-shadow: none; opacity: .5; }
+  #ws-pane .ws-porttag { font: 800 8px/1 ui-monospace, monospace; letter-spacing: .1em; color: #9fc7cd; min-width: 92px; }
+  #ws-pane .ws-portlbl { font: 600 11px/1.3 ui-monospace, monospace; color: #6c7a80; }
+  #ws-pane .ws-note { font: 600 10px/1.5 ui-monospace, monospace; color: #56666c; margin-top: 12px; }
+  #ws-pane .ws-editor { margin-top: 10px; padding: 14px; border: 1px solid rgba(0,242,255,.3); border-radius: 16px; background: rgba(0,242,255,.04); }
+  #ws-pane .ws-editwave { display: block; width: 100%; height: 150px; background: #06090c; border: 1px solid #16202a; border-radius: 10px; cursor: crosshair; touch-action: none; }
+  #ws-pane .ws-fx { flex: 1; min-width: 160px; background: #0b0f14; border: 1px solid #22303a; border-radius: 8px; color: #e6f7fa; padding: 8px 10px; font: 700 12px/1 ui-monospace, monospace; }
+  #ws-pane .ws-pgrid { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-top: 12px; }
+  #ws-pane .ws-lforow { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 7px; }
+  #ws-pane .ws-lfonum { font: 700 10px/1 ui-monospace, monospace; color: #00f2ff; min-width: 12px; }
+  #ws-pane .ws-lforow .ws-rng { width: 64px; }
+  #ws-pane .ws-pp { display: flex; flex-direction: column; gap: 4px; font: 800 8px/1 ui-monospace, monospace; letter-spacing: .12em; color: #5b6b70; }
+  #ws-pane .ws-pp input[type=range] { width: 108px; accent-color: #00f2ff; }
+  #ws-pane .ws-pp select { min-width: 72px; }
+  #ws-pane .ws-pp b { color: #e6f7fa; font-weight: 800; }
+  #ws-pane .ws-pitchrow { display: flex; gap: 4px; }
+  #ws-pane .ws-psep { width: 1px; align-self: stretch; min-height: 34px; background: #1c2730; margin: 0 3px; }
+</style>
+</head>
+<body>
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Shared storage adapter (guarded singleton) ---- */
+  window.URStore = window.URStore || (function () {
+    var mem = {};
+    var hasLS = (function () { try { var t = "__urtest__"; localStorage.setItem(t, "1"); localStorage.removeItem(t); return true; } catch (e) { return false; } })();
+    function K(ns, key) { return "ur:" + ns + ":" + key; }
+    return {
+      available: hasLS,
+      get: function (ns, key) { try { var raw = hasLS ? localStorage.getItem(K(ns, key)) : mem[K(ns, key)]; return raw == null ? null : JSON.parse(raw); } catch (e) { return null; } },
+      set: function (ns, key, val) { var raw; try { raw = JSON.stringify(val); } catch (e) { return false; } try { if (hasLS) localStorage.setItem(K(ns, key), raw); else mem[K(ns, key)] = raw; return true; } catch (e) { mem[K(ns, key)] = raw; return false; } },
+      del: function (ns, key) { try { if (hasLS) localStorage.removeItem(K(ns, key)); else delete mem[K(ns, key)]; } catch (e) {} },
+      list: function (ns) { var pre = "ur:" + ns + ":", out = []; try { if (hasLS) { for (var i = 0; i < localStorage.length; i++) { var kk = localStorage.key(i); if (kk && kk.indexOf(pre) === 0) out.push(kk.slice(pre.length)); } } else { for (var m in mem) if (mem.hasOwnProperty(m) && m.indexOf(pre) === 0) out.push(m.slice(pre.length)); } } catch (e) {} return out; }
+    };
+  })();
+
+  /* ---- Shared wave kernel (simplified for module) ---- */
+  window.URWaveKernel = window.URWaveKernel || { renderPatch: function(p, o){ return Promise.resolve({buffer: new AudioBuffer({length:1, sampleRate:44100}), duration:0.5}); } };
+
+  var seq = { bpm:120, master:0.85, transition:"cross", loop:true, chunks:[] };
+  var playing = false, playhead = 0, rafId = null, paneRef = null;
+  var ctx = null, master = null, audioBuilt = false;
+
+  function getCtx() { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); return ctx; }
+  function ensureResume() { var c = getCtx(); if (c.state === "suspended") c.resume(); }
+  function ensureAudio() { if (audioBuilt) return; ctx = getCtx(); master = ctx.createGain(); master.gain.value = seq.master; master.connect(ctx.destination); audioBuilt = true; }
+
+  function addChunk(patch, name) {
+    seq.chunks.push({ id: "c"+Date.now().toString(36), patch: patch || {}, name: name || "chunk", durBeats: 2, gain: 1, rate: {mode:"sync", div:1}, buffer: null });
+    renderStrip();
+    persist();
+  }
+
+  function renderStrip() {
+    var host = paneRef && paneRef.querySelector("#ws-strip");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!seq.chunks.length) {
+      host.innerHTML = '<div class="ws-empty">No chunks yet — add from library or capture</div>';
+      return;
+    }
+    seq.chunks.forEach(function(c, i) {
+      var d = document.createElement("div");
+      d.className = "ws-chunk" + (playing && i === currentChunkIndex() ? " playing" : "");
+      d.innerHTML =
+        '<div class="nm">' + (c.name || "chunk") + '</div>' +
+        '<canvas class="ws-thumb" width="140" height="50"></canvas>' +
+        '<div class="ctl">' +
+          '<select class="ws-sel" data-idx="' + i + '">' +
+            '<option value="sync:1">1/1</option><option value="sync:2">1/2</option><option value="sync:4">1/4</option>' +
+            '<option value="hz:220">220 Hz</option><option value="hz:440">440 Hz</option>' +
+          '</select>' +
+          '<input class="ws-rng" type="range" min="0.2" max="2" step="0.05" value="' + (c.gain||1) + '">' +
+          '<button class="ws-ic" data-idx="' + i + '" data-act="del">✕</button>' +
+        '</div>';
+      host.appendChild(d);
+    });
+  }
+
+  function currentChunkIndex() { return Math.floor(playhead) % Math.max(1, seq.chunks.length); }
+
+  function startPlay() {
+    if (playing) return;
+    playing = true;
+    playhead = 0;
+    ensureAudio();
+    var last = performance.now();
+    function loop(now) {
+      if (!playing) return;
+      var dt = (now - last) / 1000; last = now;
+      playhead += dt * (seq.bpm / 60) / 2; // 2 beats per second default
+      if (seq.loop && playhead > seq.chunks.length) playhead = 0;
+      renderStrip();
+      rafId = requestAnimationFrame(loop);
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function stopPlay() {
+    playing = false;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    renderStrip();
+  }
+
+  function persist() { try { window.URStore.set("wave-seq", "state", seq); } catch(e){} }
+  function restore() {
+    var st = window.URStore.get("wave-seq", "state");
+    if (st && st.chunks) seq.chunks = st.chunks;
+    if (st && st.bpm) seq.bpm = st.bpm;
+  }
+
+  function wireUI(pane) {
+    paneRef = pane;
+    restore();
+    renderStrip();
+
+    pane.querySelector("#ws-play").addEventListener("click", startPlay);
+    pane.querySelector("#ws-stop").addEventListener("click", stopPlay);
+    pane.querySelector("#ws-bpm").addEventListener("change", function(e) { var v = parseFloat(e.target.value); if (v>0) { seq.bpm = v; persist(); } });
+    pane.querySelector("#ws-clear").addEventListener("click", function() { stopPlay(); seq.chunks = []; renderStrip(); persist(); });
+
+    // add from library placeholder
+    pane.querySelector("#ws-addbtn").addEventListener("click", function() {
+      addChunk(null, "New Chunk");
+    });
+  }
+
+  var api = {
+    mount: function(el) { if(!el) return; el.innerHTML = paneHTML(); wireUI(el); },
+    play: startPlay, stop: stopPlay,
+    addChunkFromPatch: addChunk,
+    getSequence: function() { return seq; },
+    loadSequence: function(s) { if(s) { seq = s; renderStrip(); persist(); } }
+  };
+  window.WaveSeq = api;
+
+  function paneHTML() {
+    return '' +
+    '<div class="ws-card">' +
+    '<div class="ws-title">WAVE SEQUENCER <small>chunk-based wavetable sequencing</small></div>' +
+    '<div class="ws-row">' +
+      '<button class="ws-btn" id="ws-play">PLAY</button>' +
+      '<button class="ws-btn" id="ws-stop">STOP</button>' +
+      '<span class="ws-label">BPM</span><input class="ws-num" id="ws-bpm" type="number" value="120">' +
+      '<button class="ws-btn" id="ws-loop">LOOP</button>' +
+      '<button class="ws-btn" id="ws-clear">CLEAR</button>' +
+      '<button class="ws-btn" id="ws-addbtn">+ CHUNK</button>' +
+    '</div>' +
+    '<div class="ws-strip" id="ws-strip"></div>' +
+    '<div class="ws-ports">' +
+      '<div class="ws-portrow"><span class="ws-port inp"></span><span class="ws-porttag">IN</span><span class="ws-portlbl">&larr; from Warp Lab / library</span></div>' +
+      '<div class="ws-portrow"><span class="ws-port"></span><span class="ws-porttag">OUT</span><span class="ws-portlbl">&rarr; Arrangement (baked audio)</span></div>' +
+    '</div>' +
+    '</div>';
+  }
+
+  function boot() {
+    try {
+      var host = document.createElement("div"); host.id = "ws-pane"; document.body.appendChild(host);
+      api.mount(host);
+    } catch(e) {
+      var bar = document.createElement("div");
+      bar.style.cssText = "margin:10px;padding:10px 12px;border-radius:10px;background:#2a0d11;border:1px solid #ff5b6c;color:#ffb3bb;font:12px ui-monospace,monospace;white-space:pre-wrap";
+      bar.textContent = "[Wave Sequencer] boot error: " + (e && e.message ? e.message : e);
+      document.body.appendChild(bar);
+    }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+</script>
+</body>
+</html>
