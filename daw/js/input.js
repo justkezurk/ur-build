@@ -3,6 +3,20 @@
    DAW INPUT (pan, pinch, zoom, MOD menu, wire mode) - pure extraction
    ================================================================ */
 
+/* ---------- field refs + transform state + helpers (restored; dropped in split) ---------- */
+const field = document.getElementById('field');
+const world = document.getElementById('world');
+const wiresCv = document.getElementById('wires');
+const wctx = wiresCv.getContext('2d');
+let panX = 20, panY = 20, S = 1, DPR = 1;
+const MIN_S = 0.35, MAX_S = 2.4;
+if(saved.pan){ panX = saved.pan[0]; panY = saved.pan[1]; }
+if(saved.scale && saved.scale > 0) S = Math.max(MIN_S, Math.min(MAX_S, saved.scale));
+function clampS(s){ return Math.max(MIN_S, Math.min(MAX_S, s)); }
+function fieldRect(){ return field.getBoundingClientRect(); }
+function screenToWorld(fx, fy){ return [ (fx - panX)/S, (fy - panY)/S ]; }
+function updateZoomLbl(){ const l=document.getElementById('zoomLbl'); if(l) l.textContent=Math.round(S*100)+'%'; }
+
 /* ---------- pan + pinch-zoom (multi-touch, anchored, no-jump) ---------- */
 const ptrs = new Map();
 let panning=false, panArmed=false, panSX=0, panSY=0, panOX=0, panOY=0;
@@ -118,6 +132,7 @@ function makeNodeDraggable(el, m){
         el.addEventListener('click', stop, {capture:true, once:true}); } }
   });
   el.addEventListener('pointercancel', ()=>{ drag=false; });
+}
 
 /* ---------- wire mode ---------- */
 let wireMode=false, wireSrc=null;
@@ -199,3 +214,6 @@ document.addEventListener('pointerdown', e=>{
 });
 
 addEventListener('resize', layoutWorld);
+
+/* Wire HUB button back to wheel */
+var hb=document.getElementById('hubBtn'); if(hb) hb.addEventListener('click', ()=>{ location.href='/'; });
